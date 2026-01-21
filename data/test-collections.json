@@ -1,0 +1,191 @@
+[
+  {
+    "id": 1,
+    "name": "League of Legends",
+    "color": "#C89B3C",
+    "bgImage": "bg_lol.jpg",
+    "attributes": [
+      {
+        "name": "gender",
+        "nameFront": "Genre",
+        "type": "string"
+      },
+      {
+        "name": "position",
+        "nameFront": "Rôle",
+        "type": "array"
+      },
+      {
+        "name": "species",
+        "nameFront": "Espèce",
+        "type": "array"
+      },
+      {
+        "name": "resource",
+        "nameFront": "Ressource",
+        "type": "string"
+      },
+      {
+        "name": "rangeType",
+        "nameFront": "Type de portée",
+        "type": "array"
+      },
+      {
+        "name": "regions",
+        "nameFront": "Région(s)",
+        "type": "array"
+      },
+      {
+        "name": "releaseYear",
+        "nameFront": "Année de sortie",
+        "type": "int"
+      }
+    ],
+    "characters": [
+      {
+        "id": 1,
+        "name": "TestChampion Alpha",
+        "imageUrl": "https://ddragon.leagueoflegends.com/cdn/15.16.1/img/champion/Aatrox.png",
+        "gender": "Masculin",
+        "position": ["Haut"],
+        "species": ["Darkin"],
+        "resource": "Sans Mana",
+        "rangeType": ["Mêlée"],
+        "regions": ["Runeterra", "Shurima"],
+        "releaseYear": 2013
+      },
+      {
+        "id": 2,
+        "name": "TestChampion Beta",
+        "imageUrl": "https://ddragon.leagueoflegends.com/cdn/15.16.1/img/champion/Akali.png",
+        "gender": "Feminin",
+        "position": ["Milieu"],
+        "species": ["Humain"],
+        "resource": "Énergie",
+        "rangeType": ["Mêlée"],
+        "regions": ["Ionia"],
+        "releaseYear": 2010
+      },
+      {
+        "id": 3,
+        "name": "Ahri",
+        "imageUrl": "https://ddragon.leagueoflegends.com/cdn/15.16.1/img/champion/Ahri.png",
+        "gender": "Feminin",
+        "position": ["Milieu"],
+        "species": ["Vastaya"],
+        "resource": "Mana",
+        "rangeType": ["À distance"],
+        "regions": ["Ionia"],
+        "releaseYear": 2011
+      },
+      {
+        "id": 4,
+        "name": "Yasuo",
+        "imageUrl": "https://ddragon.leagueoflegends.com/cdn/15.16.1/img/champion/Yasuo.png",
+        "gender": "Masculin",
+        "position": ["Milieu", "Haut"],
+        "species": ["Humain"],
+        "resource": "Flow",
+        "rangeType": ["Mêlée"],
+        "regions": ["Ionia"],
+        "releaseYear": 2013
+      },
+      {
+        "id": 5,
+        "name": "Jinx",
+        "imageUrl": "https://ddragon.leagueoflegends.com/cdn/15.16.1/img/champion/Jinx.png",
+        "gender": "Feminin",
+        "position": ["ADC"],
+        "species": ["Humain"],
+        "resource": "Mana",
+        "rangeType": ["À distance"],
+        "regions": ["Zaun"],
+        "releaseYear": 2013
+      },
+      {
+        "id": 6,
+        "name": "Thresh",
+        "imageUrl": "https://ddragon.leagueoflegends.com/cdn/15.16.1/img/champion/Thresh.png",
+        "gender": "Masculin",
+        "position": ["Support"],
+        "species": ["Spectre"],
+        "resource": "Mana",
+        "rangeType": ["À distance"],
+        "regions": ["Îles Obscures"],
+        "releaseYear": 2013
+      },
+      {
+        "id": 7,
+        "name": "Zed",
+        "imageUrl": "https://ddragon.leagueoflegends.com/cdn/15.16.1/img/champion/Zed.png",
+        "gender": "Masculin",
+        "position": ["Milieu"],
+        "species": ["Humain"],
+        "resource": "Énergie",
+        "rangeType": ["Mêlée"],
+        "regions": ["Ionia"],
+        "releaseYear": 2012
+      },
+      {
+        "id": 8,
+        "name": "Lux",
+        "imageUrl": "https://ddragon.leagueoflegends.com/cdn/15.16.1/img/champion/Lux.png",
+        "gender": "Feminin",
+        "position": ["Milieu", "Support"],
+        "species": ["Humain", "Né magique"],
+        "resource": "Mana",
+        "rangeType": ["À distance"],
+        "regions": ["Demacia"],
+        "releaseYear": 2010
+      },
+      {
+        "id": 9,
+        "name": "Garen",
+        "imageUrl": "https://ddragon.leagueoflegends.com/cdn/15.16.1/img/champion/Garen.png",
+        "gender": "Masculin",
+        "position": ["Haut"],
+        "species": ["Humain"],
+        "resource": "Sans Mana",
+        "rangeType": ["Mêlée"],
+        "regions": ["Demacia"],
+        "releaseYear": 2009
+      },
+      {
+        "id": 10,
+        "name": "Ashe",
+        "imageUrl": "https://ddragon.leagueoflegends.com/cdn/15.16.1/img/champion/Ashe.png",
+        "gender": "Feminin",
+        "position": ["ADC"],
+        "species": ["Humain", "Glacié"],
+        "resource": "Mana",
+        "rangeType": ["À distance"],
+        "regions": ["Freljord"],
+        "releaseYear": 2009
+      },
+      {
+        "id": 11,
+        "name": "Darius",
+        "imageUrl": "https://ddragon.leagueoflegends.com/cdn/15.16.1/img/champion/Darius.png",
+        "gender": "Masculin",
+        "position": ["Haut"],
+        "species": ["Humain"],
+        "resource": "Mana",
+        "rangeType": ["Mêlée"],
+        "regions": ["Noxus"],
+        "releaseYear": 2012
+      },
+      {
+        "id": 12,
+        "name": "Katarina",
+        "imageUrl": "https://ddragon.leagueoflegends.com/cdn/15.16.1/img/champion/Katarina.png",
+        "gender": "Feminin",
+        "position": ["Milieu"],
+        "species": ["Humain"],
+        "resource": "Sans Mana",
+        "rangeType": ["Mêlée"],
+        "regions": ["Noxus"],
+        "releaseYear": 2009
+      }
+    ]
+  }
+]

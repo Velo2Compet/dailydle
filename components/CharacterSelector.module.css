@@ -1,0 +1,134 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.label {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: #cbd5e1;
+  opacity: 0.9;
+  margin-bottom: 0.5rem;
+}
+
+.searchInput {
+  width: 100%;
+  padding: 1rem 1.5rem;
+  font-size: 1rem;
+  background: rgba(30, 41, 59, 0.8);
+  border: 2px solid rgba(168, 85, 247, 0.3);
+  border-radius: 12px;
+  color: #ffffff;
+  transition: all 0.3s ease;
+}
+
+.searchInput:focus {
+  outline: none;
+  border-color: #a855f7;
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1);
+}
+
+.searchInput::placeholder {
+  color: #64748b;
+}
+
+.searchInput:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.select {
+  display: none; /* On utilise la recherche au lieu du select */
+}
+
+.selectedCharacter {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: rgba(30, 41, 59, 0.6);
+  border-radius: 12px;
+  border: 1px solid rgba(168, 85, 247, 0.2);
+}
+
+.characterImage {
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 2px solid rgba(168, 85, 247, 0.3);
+}
+
+.characterName {
+  font-weight: 600;
+  color: #ffffff;
+  font-size: 1.125rem;
+}
+
+/* Dropdown pour les résultats de recherche */
+.searchResults {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 0.5rem;
+  background: rgba(30, 41, 59, 0.95);
+  border: 2px solid rgba(168, 85, 247, 0.3);
+  border-radius: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+  z-index: 1000;
+  backdrop-filter: blur(10px);
+}
+
+.searchResultItem {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  border-bottom: 1px solid rgba(168, 85, 247, 0.1);
+}
+
+.searchResultItem:last-child {
+  border-bottom: none;
+}
+
+.searchResultItem:hover {
+  background: rgba(168, 85, 247, 0.1);
+}
+
+.searchResultItem:disabled,
+.searchResultItem.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.searchResultImage {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 2px solid rgba(168, 85, 247, 0.3);
+}
+
+.searchResultName {
+  font-weight: 500;
+  color: #ffffff;
+  flex: 1;
+}
+
+.searchResultDisabled {
+  font-size: 0.75rem;
+  color: #fca5a5;
+  margin-left: auto;
+}
+
+.searchWrapper {
+  position: relative;
+  width: 100%;
+}

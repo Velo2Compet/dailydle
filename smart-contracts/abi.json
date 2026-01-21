@@ -1,0 +1,15 @@
+[
+  "function makeGuess(uint256 _collectionId, uint256 _characterId) external returns (bool isCorrect, uint256 attempts)",
+  "function verifyGuess(uint256 _collectionId, uint256 _characterId) external view returns (bool)",
+  "function getAttempts(address _player, uint256 _collectionId, uint256 _day) external view returns (uint256)",
+  "function getPlayerGuesses(address _player, uint256 _collectionId) external view returns ((address player, uint256 collectionId, uint256 characterId, uint256 timestamp, bool isCorrect)[])",
+  "function getCollection(uint256 _collectionId) external view returns ((uint256 id, string name, bytes32 dailyCharacterHash, uint256 lastUpdateDay))",
+  "function getCharacter(uint256 _collectionId, uint256 _characterId) external view returns ((uint256 id, uint256 collectionId, string name, bytes32 attributesHash))",
+  "function createCollection(string memory _name) external returns (uint256)",
+  "function addCharacter(uint256 _collectionId, string memory _name, bytes32 _attributesHash) external returns (uint256)",
+  "function updateDailyCharacter(uint256 _collectionId, bytes32 _characterHash) external",
+  "event GuessMade(address indexed player, uint256 indexed collectionId, uint256 indexed characterId, bool isCorrect, uint256 attempts)",
+  "event CollectionCreated(uint256 indexed collectionId, string name)",
+  "event CharacterAdded(uint256 indexed collectionId, uint256 indexed characterId, string name)",
+  "event DailyCharacterUpdated(uint256 indexed collectionId, bytes32 characterHash, uint256 day)"
+]

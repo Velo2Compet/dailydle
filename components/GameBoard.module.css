@@ -1,0 +1,354 @@
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #1a0b2e 0%, #16213e 50%, #0f3460 100%);
+  color: #ffffff;
+}
+
+.header {
+  margin-bottom: 2rem;
+}
+
+.title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #a855f7;
+  margin: 0 0 1rem 0;
+  text-transform: capitalize;
+}
+
+.stats {
+  display: flex;
+  gap: 2rem;
+  margin-top: 1rem;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.statLabel {
+  font-size: 0.875rem;
+  color: #cbd5e1;
+  opacity: 0.8;
+}
+
+.statValue {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.message {
+  text-align: center;
+  padding: 3rem;
+  background: rgba(30, 41, 59, 0.8);
+  border-radius: 16px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(168, 85, 247, 0.2);
+}
+
+.message h2 {
+  margin-bottom: 1rem;
+  color: #ffffff;
+  font-size: 1.5rem;
+}
+
+.message p {
+  color: #cbd5e1;
+  font-size: 1rem;
+}
+
+.userInfo {
+  margin-top: 1.5rem;
+  padding: 1.5rem;
+  background: rgba(30, 41, 59, 0.6);
+  border-radius: 12px;
+  border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+.userInfo h2 {
+  color: #a855f7;
+  margin-bottom: 0.5rem;
+}
+
+.userInfo p {
+  color: #cbd5e1;
+  margin: 0.5rem 0;
+}
+
+.walletConnect {
+  margin-top: 1.5rem;
+  display: flex;
+  justify-content: center;
+}
+
+.successMessage {
+  padding: 1.5rem;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border-radius: 12px;
+  margin-bottom: 2rem;
+  text-align: center;
+  box-shadow: 0 4px 6px rgba(16, 185, 129, 0.3);
+}
+
+.successMessage h2 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.5rem;
+}
+
+.successMessage p {
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.searchSection {
+  margin-bottom: 2rem;
+}
+
+.searchInstruction {
+  color: #cbd5e1;
+  font-size: 0.875rem;
+  margin-bottom: 0.75rem;
+  opacity: 0.9;
+}
+
+.searchInput {
+  width: 100%;
+  padding: 1rem 1.5rem;
+  font-size: 1rem;
+  background: rgba(30, 41, 59, 0.8);
+  border: 2px solid rgba(168, 85, 247, 0.3);
+  border-radius: 12px;
+  color: #ffffff;
+  transition: all 0.3s ease;
+}
+
+.searchInput:focus {
+  outline: none;
+  border-color: #a855f7;
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1);
+}
+
+.searchInput::placeholder {
+  color: #64748b;
+}
+
+.guessButton {
+  width: 100%;
+  padding: 1rem 2rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: white;
+  background: linear-gradient(135deg, #a855f7 0%, #9333ea 100%);
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 1rem;
+  box-shadow: 0 4px 6px rgba(168, 85, 247, 0.3);
+}
+
+.guessButton:hover:not(:disabled) {
+  background: linear-gradient(135deg, #9333ea 0%, #7e22ce 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(168, 85, 247, 0.4);
+}
+
+.guessButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.errorMessage {
+  padding: 1rem 1.5rem;
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  border-radius: 12px;
+  margin-bottom: 1rem;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.guessResult {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: rgba(30, 41, 59, 0.6);
+  border-radius: 12px;
+  border: 1px solid rgba(168, 85, 247, 0.2);
+}
+
+.guessResult h3 {
+  margin: 0 0 1rem 0;
+  color: #ffffff;
+  font-size: 1.25rem;
+}
+
+.guessResult p {
+  margin: 0 0 1rem 0;
+  font-size: 1.125rem;
+  color: #cbd5e1;
+}
+
+.guessHistory {
+  margin-top: 3rem;
+}
+
+.guessHistory h3 {
+  margin-bottom: 1.5rem;
+  color: #ffffff;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.guessItem {
+  margin-bottom: 1.5rem;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  border: none;
+}
+
+.guessHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  padding: 0.75rem 0;
+}
+
+.guessName {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.correctBadge {
+  font-size: 1.25rem;
+  color: #10b981;
+  font-weight: bold;
+}
+
+.incorrectBadge {
+  font-size: 1.25rem;
+  color: #ef4444;
+  font-weight: bold;
+}
+
+/* Table style pour les résultats */
+.resultsTable {
+  width: 100%;
+  margin-top: 2rem;
+  background: rgba(30, 41, 59, 0.6);
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(168, 85, 247, 0.2);
+}
+
+.tableHeader {
+  display: grid;
+  grid-template-columns: 200px repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  background: rgba(168, 85, 247, 0.1);
+  border-bottom: 2px solid rgba(168, 85, 247, 0.3);
+  font-weight: 600;
+  color: #cbd5e1;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tableRow {
+  display: grid;
+  grid-template-columns: 200px repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid rgba(168, 85, 247, 0.1);
+  align-items: center;
+}
+
+.tableRow:last-child {
+  border-bottom: none;
+}
+
+.characterCell {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.characterImage {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 2px solid rgba(168, 85, 247, 0.3);
+}
+
+.characterName {
+  font-weight: 600;
+  color: #ffffff;
+  font-size: 0.95rem;
+}
+
+.attributeCell {
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-align: center;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attributeCorrect {
+  background-color: #10b981;
+  color: white;
+}
+
+.attributePartial {
+  background-color: #f59e0b;
+  color: white;
+}
+
+.attributeIncorrect {
+  background-color: #ef4444;
+  color: white;
+}
+
+.attributeArrow {
+  margin-left: 0.25rem;
+  font-size: 0.75rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .container {
+    padding: 1rem 0.5rem;
+  }
+
+  .title {
+    font-size: 2rem;
+  }
+
+  .tableHeader,
+  .tableRow {
+    grid-template-columns: 150px repeat(auto-fit, minmax(100px, 1fr));
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    font-size: 0.75rem;
+  }
+
+  .characterImage {
+    width: 40px;
+    height: 40px;
+  }
+}

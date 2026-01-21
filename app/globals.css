@@ -1,14 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 @layer base {
   :root {
-    --background: #ffffff;
-    --foreground: #171717;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --background: #0a0a0a;
-      --foreground: #ededed;
-    }
+    --background: #1a202c;
+    --foreground: #e2e8f0;
+    
+    --black: 0 0% 8%;
+    --dark: 0 0% 8%;
+    --lightDark: 0 0% 17%;
+    --grey: 0 0% 97%;
+    --darkGrey: 0 0% 35%;
+    --lightGrey: 0 0% 95%;
+    --red: 4 77% 45%;
+    --green: 109 77% 45%;
+    --brown: 16 100% 14%;
+    
+    --muted: 215.4 16.3% 46.9%;
+    --muted-foreground: 215.4 16.3% 46.9%;
   }
 
   html,
@@ -19,10 +29,63 @@
 
   body {
     color: var(--foreground);
-    background: var(--background);
+    background: linear-gradient(to bottom right, #0a0a15, #0f0f1a, #0a0a15);
+    background-attachment: fixed;
     font-family: var(--font-inter), sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    min-height: 100vh;
+  }
+
+  .perspective {
+    perspective: 1000px;
+  }
+
+  .transform-style {
+    transform-style: preserve-3d;
+  }
+
+  .backface-hidden {
+    backface-visibility: hidden;
+  }
+
+  .rotate-y-0 {
+    transform: rotateY(0deg);
+  }
+
+  .rotate-y-180 {
+    transform: rotateY(180deg);
+  }
+
+  .rotate-y-180 {
+    transform: rotateY(180deg);
+  }
+
+  /* Scrollbar Styles - WebKit */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #121217;
+    border-radius: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #8b5cf6 0%, #3b82f6 100%);
+    border-radius: 10px;
+    border: 2px solid #121217;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #a78bfa 0%, #60a5fa 100%);
+  }
+
+  /* Scrollbar Styles - Firefox */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #8b5cf6 #121217;
   }
 
   code {
@@ -55,6 +118,271 @@
   @media (prefers-color-scheme: dark) {
     html {
       color-scheme: dark;
+    }
+  }
+
+  /* Styles pour la modale OnchainKit Wallet - Style du site */
+  [data-onchainkit="wallet-modal"],
+  [data-onchainkit="wallet-dialog"],
+  [role="dialog"],
+  div[role="dialog"] {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    z-index: 9999 !important;
+    padding: 1rem !important;
+    background: rgba(0, 0, 0, 0.7) !important;
+    backdrop-filter: blur(8px) !important;
+  }
+
+  /* Conteneur principal de la modale */
+  [data-onchainkit="wallet-modal"] > div,
+  [data-onchainkit="wallet-dialog"] > div,
+  [role="dialog"] > div:first-child,
+  div[role="dialog"] > div:first-child {
+    width: min(480px, 90vw) !important;
+    max-width: 480px !important;
+    min-width: 400px !important;
+    max-height: 85vh !important;
+    margin: auto !important;
+    position: relative !important;
+    background: linear-gradient(to bottom right, #121217, #1a1a2e, #121217) !important;
+    border: 1px solid rgba(139, 92, 246, 0.3) !important;
+    border-radius: 1rem !important;
+    box-shadow: 0 20px 60px rgba(139, 92, 246, 0.2), 0 0 40px rgba(59, 130, 246, 0.1) !important;
+    padding: 1.5rem !important;
+    overflow-y: auto !important;
+  }
+
+  /* Titre de la modale */
+  [data-onchainkit="wallet-modal"] h2,
+  [data-onchainkit="wallet-modal"] h3,
+  [data-onchainkit="wallet-dialog"] h2,
+  [data-onchainkit="wallet-dialog"] h3,
+  [role="dialog"] h2,
+  [role="dialog"] h3 {
+    color: white !important;
+    font-size: 1.25rem !important;
+    font-weight: 700 !important;
+    margin-bottom: 1.25rem !important;
+    text-align: center !important;
+  }
+
+  /* Boutons de la modale */
+  [data-onchainkit="wallet-modal"] button,
+  [data-onchainkit="wallet-dialog"] button,
+  [role="dialog"] button {
+    width: 100% !important;
+    padding: 0.875rem 1.25rem !important;
+    margin: 0.5rem 0 !important;
+    min-height: 52px !important;
+    border-radius: 0.75rem !important;
+    font-size: 0.9375rem !important;
+    font-weight: 600 !important;
+    transition: all 0.2s !important;
+    border: 1px solid rgba(139, 92, 246, 0.3) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+  }
+
+  /* Structure uniforme pour tous les boutons : logo à gauche, texte centré */
+  [data-onchainkit="wallet-modal"] button > *,
+  [role="dialog"] button > * {
+    display: flex !important;
+    align-items: center !important;
+  }
+
+  /* Premier élément (logo/icône) - toujours à gauche avec largeur fixe */
+  [data-onchainkit="wallet-modal"] button > *:first-child,
+  [role="dialog"] button > *:first-child {
+    width: 1.25rem !important;
+    min-width: 1.25rem !important;
+    height: 1.25rem !important;
+    flex-shrink: 0 !important;
+    justify-content: center !important;
+    align-items: center !important;
+  }
+
+  /* Texte - centré avec flex: 1 pour occuper l'espace restant */
+  [data-onchainkit="wallet-modal"] button > *:last-child:not(:first-child),
+  [role="dialog"] button > *:last-child:not(:first-child) {
+    flex: 1 !important;
+    justify-content: center !important;
+    text-align: center !important;
+    margin: 0 auto !important;
+  }
+
+  /* Si le bouton a plusieurs enfants, utiliser space-between */
+  [data-onchainkit="wallet-modal"] button:has(> *:nth-child(2)),
+  [role="dialog"] button:has(> *:nth-child(2)) {
+    justify-content: space-between !important;
+  }
+
+  /* Bouton "Sign in with Base" */
+  [data-onchainkit="wallet-modal"] button:first-of-type,
+  [role="dialog"] button:first-of-type {
+    background: linear-gradient(to right, #8b5cf6, #3b82f6) !important;
+    color: white !important;
+    border: none !important;
+  }
+
+  [data-onchainkit="wallet-modal"] button:first-of-type:hover,
+  [role="dialog"] button:first-of-type:hover {
+    background: linear-gradient(to right, #7c3aed, #2563eb) !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4) !important;
+  }
+
+  /* Autres boutons de wallet */
+  [data-onchainkit="wallet-modal"] button:not(:first-of-type),
+  [role="dialog"] button:not(:first-of-type) {
+    background: rgba(30, 41, 59, 0.8) !important;
+    color: white !important;
+  }
+
+  [data-onchainkit="wallet-modal"] button:not(:first-of-type):hover,
+  [role="dialog"] button:not(:first-of-type):hover {
+    background: rgba(139, 92, 246, 0.2) !important;
+    border-color: rgba(139, 92, 246, 0.5) !important;
+    transform: translateY(-1px) !important;
+  }
+
+  /* Texte de séparation */
+  [data-onchainkit="wallet-modal"] p,
+  [role="dialog"] p {
+    color: rgba(255, 255, 255, 0.5) !important;
+    text-align: center !important;
+    margin: 0.75rem 0 !important;
+    font-size: 0.8125rem !important;
+    background: transparent !important;
+    padding: 0 !important;
+  }
+
+  /* Supprimer le fond blanc du texte "or use another wallet" */
+  [data-onchainkit="wallet-modal"] p *,
+  [role="dialog"] p * {
+    background: transparent !important;
+    color: rgba(255, 255, 255, 0.5) !important;
+  }
+
+  /* Texte des termes */
+  [data-onchainkit="wallet-modal"] small,
+  [role="dialog"] small {
+    color: rgba(255, 255, 255, 0.5) !important;
+    font-size: 0.75rem !important;
+    text-align: center !important;
+    display: block !important;
+    margin-top: 1.5rem !important;
+    line-height: 1.5 !important;
+  }
+
+  /* Bouton de fermeture */
+  [data-onchainkit="wallet-modal"] button[aria-label*="close"],
+  [data-onchainkit="wallet-modal"] button[aria-label*="Close"],
+  [role="dialog"] button[aria-label*="close"],
+  [role="dialog"] button[aria-label*="Close"] {
+    position: absolute !important;
+    top: 1rem !important;
+    right: 1rem !important;
+    width: auto !important;
+    min-width: auto !important;
+    min-height: auto !important;
+    padding: 0.25rem !important;
+    background: transparent !important;
+    border: none !important;
+    color: rgba(255, 255, 255, 0.7) !important;
+  }
+
+  [data-onchainkit="wallet-modal"] button[aria-label*="close"]:hover,
+  [data-onchainkit="wallet-modal"] button[aria-label*="Close"]:hover,
+  [role="dialog"] button[aria-label*="close"]:hover,
+  [role="dialog"] button[aria-label*="Close"]:hover {
+    background: transparent !important;
+    color: white !important;
+  }
+
+  /* Icône du bouton de fermeture */
+  [data-onchainkit="wallet-modal"] button[aria-label*="close"] svg,
+  [data-onchainkit="wallet-modal"] button[aria-label*="Close"] svg,
+  [role="dialog"] button[aria-label*="close"] svg,
+  [role="dialog"] button[aria-label*="Close"] svg {
+    width: 1rem !important;
+    height: 1rem !important;
+  }
+
+  /* Uniformiser toutes les icônes et logos - forcer la même taille */
+  [data-onchainkit="wallet-modal"] button svg,
+  [data-onchainkit="wallet-modal"] button img,
+  [data-onchainkit="wallet-modal"] button > div svg,
+  [data-onchainkit="wallet-modal"] button > div img,
+  [data-onchainkit="wallet-modal"] button > span svg,
+  [data-onchainkit="wallet-modal"] button > span img,
+  [role="dialog"] button svg,
+  [role="dialog"] button img,
+  [role="dialog"] button > div svg,
+  [role="dialog"] button > div img,
+  [role="dialog"] button > span svg,
+  [role="dialog"] button > span img {
+    width: 1.25rem !important;
+    height: 1.25rem !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Logo Base Account - ajustement vertical */
+  [data-onchainkit="wallet-modal"] button:first-of-type svg,
+  [data-onchainkit="wallet-modal"] button:first-of-type img,
+  [data-onchainkit="wallet-modal"] button:first-of-type > div svg,
+  [data-onchainkit="wallet-modal"] button:first-of-type > div img,
+  [data-onchainkit="wallet-modal"] button:first-of-type > span svg,
+  [data-onchainkit="wallet-modal"] button:first-of-type > span img,
+  [role="dialog"] button:first-of-type svg,
+  [role="dialog"] button:first-of-type img,
+  [role="dialog"] button:first-of-type > div svg,
+  [role="dialog"] button:first-of-type > div img,
+  [role="dialog"] button:first-of-type > span svg,
+  [role="dialog"] button:first-of-type > span img {
+    padding-top: 3px !important;
+  }
+
+  /* S'assurer que les divs/span conteneurs d'icônes ont la même taille */
+  [data-onchainkit="wallet-modal"] button > div:first-child,
+  [data-onchainkit="wallet-modal"] button > span:first-child,
+  [role="dialog"] button > div:first-child,
+  [role="dialog"] button > span:first-child {
+    width: 1.25rem !important;
+    min-width: 1.25rem !important;
+    height: 1.25rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Forcer le fond sombre pour tous les éléments de la modale */
+  [data-onchainkit="wallet-modal"] *,
+  [role="dialog"] * {
+    background-color: transparent !important;
+  }
+
+  [data-onchainkit="wallet-modal"] > div,
+  [role="dialog"] > div:first-child {
+    background: linear-gradient(to bottom right, #121217, #1a1a2e, #121217) !important;
+  }
+
+  @media (max-width: 768px) {
+    [data-onchainkit="wallet-modal"] > div,
+    [data-onchainkit="wallet-dialog"] > div,
+    [role="dialog"] > div:first-child,
+    div[role="dialog"] > div:first-child {
+      width: 90vw !important;
+      min-width: 90vw !important;
+      padding: 1.25rem !important;
     }
   }
 }
