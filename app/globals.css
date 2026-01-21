@@ -253,24 +253,30 @@
     transform: translateY(-1px) !important;
   }
 
-  /* Texte de séparation - "or use another wallet" - Centrer avec Tailwind */
+  /* Texte de séparation - "or use another wallet" - Centrer */
   [data-onchainkit="wallet-modal"] > div,
   [role="dialog"] > div:first-child,
   div[role="dialog"] > div:first-child {
-    @apply text-center !important;
+    text-align: center !important;
   }
 
   [data-onchainkit="wallet-modal"] p,
   [role="dialog"] p {
-    @apply text-center mx-auto !important;
+    text-align: center !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
   }
 
   /* Texte des termes - Terms of Service - Plus petit et centré avec gap horizontal */
+  /* Surcharge toutes les classes OnchainKit avec une spécificité maximale */
   [data-onchainkit="wallet-modal"] small,
   [role="dialog"] small,
-  [data-onchainkit="wallet-modal"] small.ock\:flex,
-  [role="dialog"] small.ock\:flex {
-    font-size: 0.625rem !important;
+  [data-onchainkit="wallet-modal"] small[class*="ock"],
+  [role="dialog"] small[class*="ock"],
+  [data-onchainkit="wallet-modal"] small.ock\:text-\[10px\],
+  [role="dialog"] small.ock\:text-\[10px\] {
+    font-size: 0.5rem !important;
+    line-height: 0.75rem !important;
     display: flex !important;
     flex-direction: row !important;
     flex-wrap: wrap !important;
@@ -278,8 +284,14 @@
     align-items: center !important;
     gap: 0.25rem !important;
     text-align: center !important;
-    margin: 1.5rem auto 0 !important;
+    margin-top: 1.5rem !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    margin-bottom: 0 !important;
     width: 100% !important;
+    font-weight: normal !important;
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
   }
 
   /* Tous les enfants du small pour réduire la taille et forcer le gap */
@@ -288,9 +300,15 @@
   [data-onchainkit="wallet-modal"] small span,
   [role="dialog"] small span,
   [data-onchainkit="wallet-modal"] small a,
-  [role="dialog"] small a {
-    font-size: 0.625rem !important;
-    display: inline-block !important;
+  [role="dialog"] small a,
+  [data-onchainkit="wallet-modal"] small[class*="ock"] *,
+  [role="dialog"] small[class*="ock"] *,
+  [data-onchainkit="wallet-modal"] small.ock\:text-\[10px\] *,
+  [role="dialog"] small.ock\:text-\[10px\] * {
+    font-size: 0.5rem !important;
+    line-height: 0.75rem !important;
+    display: inline !important;
+    margin: 0 !important;
   }
 
   /* Bouton de fermeture */
