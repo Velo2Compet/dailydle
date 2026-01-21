@@ -285,8 +285,8 @@ export function GameBoard({ collection }: GameBoardProps) {
   interface Comparison {
     isCorrect: boolean;
     isPartial?: boolean;
-    guessValue: number | string;
-    correctValue: number | string;
+    guessValue: number | string | string[];
+    correctValue: number | string | string[];
   }
 
   const getStatusClass = (comparison: Comparison) => {
