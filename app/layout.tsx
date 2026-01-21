@@ -5,17 +5,12 @@ import { minikitConfig } from "../minikit.config";
 import { RootProvider } from "./rootProvider";
 import "./globals.css";
 
-export const metadata: Metadata = {
-  other: {
-    'base:app_id': '6970863785045b1333e7babb',
-  },
-};
-
 export async function generateMetadata(): Promise<Metadata> {
   return {
     title: minikitConfig.miniapp.name,
     description: minikitConfig.miniapp.description,
     other: {
+      'base:app_id': '6970863785045b1333e7babb',
       "fc:frame": JSON.stringify({
         version: minikitConfig.miniapp.version,
         imageUrl: minikitConfig.miniapp.heroImageUrl,
