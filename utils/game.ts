@@ -5,7 +5,7 @@ import { keccak256, toBytes, stringToBytes } from "viem";
  * Normalise un personnage pour avoir une structure cohérente
  * Les attributs peuvent être directement sur l'objet ou dans character.attributes
  */
-function normalizeCharacter(character: any): Character {
+export function normalizeCharacter(character: any): Character {
   const excludeKeys = ['id', 'name', 'imageUrl'];
   const attributes: Record<string, string | string[] | number> = {};
   

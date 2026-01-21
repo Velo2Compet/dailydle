@@ -2,7 +2,39 @@
 import { useState, useEffect } from "react";
 import { GameBoard } from "@/components/GameBoard";
 import { Collection } from "@/types/game";
+import { normalizeCharacter } from "@/utils/game";
 import testCollections from "@/data/test-collections.json";
+
+// Type pour le JSON brut (avant transformation)
+type JsonCollection = {
+  id: number;
+  name: string;
+  color?: string;
+  bgImage?: string;
+  attributes: Array<{ name: string; nameFront: string; type: string }>;
+  characters: Array<{
+    id: number;
+    name: string;
+    imageUrl?: string;
+    [key: string]: unknown; // Attributs dynamiques
+  }>;
+};
+
+// Fonction pour transformer une collection JSON en Collection typée
+function transformCollection(jsonCollection: JsonCollection): Collection {
+  return {
+    id: jsonCollection.id,
+    name: jsonCollection.name,
+    color: jsonCollection.color,
+    bgImage: jsonCollection.bgImage,
+    attributes: jsonCollection.attributes.map((attr) => ({
+      name: attr.name,
+      nameFront: attr.nameFront,
+      type: attr.type as "string" | "array" | "int" | "bool",
+    })),
+    characters: jsonCollection.characters.map((char) => normalizeCharacter(char)),
+  };
+}
 
 export default function GamePage() {
   const [collection, setCollection] = useState<Collection | null>(null);
@@ -10,11 +42,13 @@ export default function GamePage() {
   useEffect(() => {
     // Charger la première collection de test
     if (testCollections.length > 0) {
-      const firstCollection = testCollections[0] as Collection;
+      const jsonCollection = testCollections[0] as JsonCollection;
+      // Transformer le JSON en Collection typée
+      const transformedCollection = transformCollection(jsonCollection);
       // Vérifier que la collection a des personnages
-      if (firstCollection && firstCollection.characters && firstCollection.characters.length > 0) {
+      if (transformedCollection && transformedCollection.characters && transformedCollection.characters.length > 0) {
         // Utiliser l'ID de la collection depuis le JSON (doit correspondre à celui initialisé dans le contrat)
-        setCollection(firstCollection);
+        setCollection(transformedCollection);
       }
     }
   }, []);

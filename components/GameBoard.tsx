@@ -125,7 +125,7 @@ export function GameBoard({ collection }: GameBoardProps) {
   }, [error, isPending, isConfirming]);
 
   // Initialiser les colonnes révélées pour les propositions existantes au chargement
-  // On révèle immédiatement toutes les propositions sauf la dernière (si elle est nouvelle)
+  // On révèle immédiatement toutes les propositions sauf la dernière (qui sera animée si c'est un nouveau guess)
   useEffect(() => {
     if (gameState.guesses.length > 0) {
       // Vérifier que toutes les propositions ont des comparisons (données complètes)
@@ -135,7 +135,6 @@ export function GameBoard({ collection }: GameBoardProps) {
       
       if (allGuessesComplete) {
         const currentGuessesCount = gameState.guesses.length;
-        const lastIndex = currentGuessesCount - 1;
         
         setRevealedColumns(prev => {
           const newMap = new Map(prev);
@@ -155,9 +154,9 @@ export function GameBoard({ collection }: GameBoardProps) {
                 hasChanges = true;
               }
             } 
-            // Si ce n'est pas la dernière proposition ET qu'elle n'a pas encore été révélée
-            // On la révèle immédiatement (sans animation)
-            else if (index < lastIndex && !newMap.has(index)) {
+            // Si ce n'est pas la dernière proposition (elle sera animée séparément)
+            // ET qu'elle n'a pas encore été révélée, on la révèle immédiatement (sans animation)
+            else if (index < currentGuessesCount - 1 && !newMap.has(index)) {
               const totalColumns = guess.comparisons.length + 1;
               const revealedSet = new Set<number>();
               for (let i = 0; i < totalColumns; i++) {
@@ -202,16 +201,22 @@ export function GameBoard({ collection }: GameBoardProps) {
         // Initialiser l'animation pour la nouvelle proposition UNIQUEMENT (la dernière)
         const totalColumns = latestGuess.comparisons.length + 1; // +1 pour la colonne personnage
         
-        // S'assurer que cette proposition n'est pas déjà révélée (pour éviter les conflits)
+        // S'assurer que cette proposition commence complètement cachée (aucune colonne révélée)
         setRevealedColumns(prev => {
           const newMap = new Map(prev);
-          // Si la proposition existe déjà, la réinitialiser pour l'animation
-          if (newMap.has(lastIndex)) {
-            newMap.delete(lastIndex);
-          }
+          // Réinitialiser complètement pour cette nouvelle proposition
+          newMap.delete(lastIndex);
           return newMap;
         });
         
+        // Ne pas marquer comme complètement révélée immédiatement
+        setFullyRevealedGuesses(prevSet => {
+          const newSet = new Set(prevSet);
+          newSet.delete(lastIndex); // S'assurer qu'elle n'est pas marquée comme révélée
+          return newSet;
+        });
+        
+        // Démarrer l'animation après un court délai pour s'assurer que le DOM est prêt
         // Révéler les colonnes progressivement UNIQUEMENT pour cette nouvelle proposition
         for (let i = 0; i < totalColumns; i++) {
           setTimeout(() => {
@@ -222,7 +227,7 @@ export function GameBoard({ collection }: GameBoardProps) {
               newMap.set(lastIndex, revealedSet);
               return newMap;
             });
-          }, i * 150); // 150ms entre chaque colonne
+          }, 50 + i * 150); // 50ms de délai initial + 150ms entre chaque colonne
         }
         
         // Après que toutes les colonnes soient révélées, marquer cette proposition comme complètement révélée
@@ -240,7 +245,7 @@ export function GameBoard({ collection }: GameBoardProps) {
             }
             return newMap;
           });
-        }, totalColumns * 150 + 100); // Après l'animation + un petit délai
+        }, 50 + totalColumns * 150 + 100); // Après l'animation + un petit délai
         
         // Mettre à jour le compteur de guesses précédents
         setPreviousGuessesCount(currentGuessesCount);
@@ -435,7 +440,8 @@ export function GameBoard({ collection }: GameBoardProps) {
                     // Vérifier si cette proposition est complètement révélée (pas d'animation en cours)
                     const isFullyRevealed = fullyRevealedGuesses.has(index);
                     // Si la proposition est en cours d'animation (dans le Map mais pas complètement révélée)
-                    const isCurrentlyAnimating = revealed !== undefined && !isFullyRevealed;
+                    // OU si elle n'est pas du tout dans le Map (nouveau guess qui n'a pas encore commencé l'animation)
+                    const isCurrentlyAnimating = !isFullyRevealed;
                     // Pour les propositions en cours d'animation, on vérifie si chaque colonne est révélée
                     // Pour les autres (complètement révélées), on révèle tout par défaut
                     const isPersonnageRevealed = isCurrentlyAnimating ? (revealed?.has(0) ?? false) : true;
@@ -468,6 +474,7 @@ export function GameBoard({ collection }: GameBoardProps) {
                           const arrow = getArrow(comparison);
                           const columnIndex = compIndex + 1; // +1 car la colonne personnage est à l'index 0
                           // Pour les propositions en cours d'animation, vérifier si la colonne est révélée
+                          // Si révélé est undefined (pas encore initialisé), la colonne n'est pas révélée
                           // Pour les autres (complètement révélées), révéler par défaut
                           const isRevealed = isCurrentlyAnimating ? (revealed?.has(columnIndex) ?? false) : true;
                           
