@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useAccount } from "wagmi";
 import { useMiniKit } from "@coinbase/onchainkit/minikit";
-import { Collection, Character, GuessResult } from "@/types/game";
+import { Collection, GuessResult } from "@/types/game";
 import { CharacterSelector } from "./CharacterSelector";
 import { GameHeader } from "./GameHeader";
 import { WalletButton } from "./WalletButton";
@@ -18,11 +18,10 @@ interface GameBoardProps {
 }
 
 export function GameBoard({ collection }: GameBoardProps) {
-  const { address, isConnected } = useAccount();
+  const { isConnected } = useAccount();
   const { context, isFrameReady } = useMiniKit();
   const isFarcasterConnected = !!context?.user?.fid;
   const [selectedCharacterId, setSelectedCharacterId] = useState<number | null>(null);
-  const [lastGuessResult, setLastGuessResult] = useState<GuessResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   // État pour suivre quelles colonnes ont été révélées pour chaque guess (clé = index dans le tableau)
   const [revealedColumns, setRevealedColumns] = useState<Map<number, Set<number>>>(new Map());
@@ -31,7 +30,7 @@ export function GameBoard({ collection }: GameBoardProps) {
   // État pour suivre le nombre de guesses précédents (pour détecter les nouveaux)
   const [previousGuessesCount, setPreviousGuessesCount] = useState<number>(0);
   
-  const { makeGuess, isPending, isConfirming, isConfirmed, error, hash } = useMakeGuess();
+  const { makeGuess, isPending, isConfirming, isConfirmed, error } = useMakeGuess();
   const gameStateResult = useGameState(collection);
   const gameState = {
     collectionId: gameStateResult.collectionId,
@@ -86,9 +85,8 @@ export function GameBoard({ collection }: GameBoardProps) {
       return;
     }
 
-    // Réinitialiser l'erreur et le résultat précédent
+    // Réinitialiser l'erreur
     setErrorMessage(null);
-    setLastGuessResult(null);
 
     try {
       // Lancer la transaction
@@ -99,9 +97,10 @@ export function GameBoard({ collection }: GameBoardProps) {
       
       // Ne pas afficher le résultat maintenant - attendre la confirmation
       // Le résultat sera mis à jour automatiquement via useGameState après confirmation
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error making guess:", err);
-      let errorMsg = err?.message || String(err) || "Une erreur est survenue lors de la soumission.";
+      const errorObj = err as { message?: string };
+      let errorMsg = errorObj?.message || String(err) || "Une erreur est survenue lors de la soumission.";
       
       // Messages d'erreur plus clairs
       if (errorMsg.includes("Collection does not exist") || errorMsg.includes("Collection has no characters")) {
@@ -199,7 +198,6 @@ export function GameBoard({ collection }: GameBoardProps) {
       
       // Vérifier que ce guess a des comparisons (données complètes)
       if (latestGuess && latestGuess.comparisons && latestGuess.comparisons.length > 0) {
-        setLastGuessResult(latestGuess);
         
         // Initialiser l'animation pour la nouvelle proposition UNIQUEMENT (la dernière)
         const totalColumns = latestGuess.comparisons.length + 1; // +1 pour la colonne personnage
@@ -269,7 +267,7 @@ export function GameBoard({ collection }: GameBoardProps) {
                   Initialisation...
                 </span>
               </h2>
-              <p className="text-muted-foreground text-lg">Chargement de l'application...</p>
+              <p className="text-muted-foreground text-lg">Chargement de l&apos;application...</p>
             </div>
           </div>
         </div>
@@ -279,13 +277,20 @@ export function GameBoard({ collection }: GameBoardProps) {
 
   const canPlay = isConnected;
 
-  const getStatusClass = (comparison: any) => {
+  interface Comparison {
+    isCorrect: boolean;
+    isPartial?: boolean;
+    guessValue: number | string;
+    correctValue: number | string;
+  }
+
+  const getStatusClass = (comparison: Comparison) => {
     if (comparison.isCorrect) return "bg-green";
     if (comparison.isPartial) return "bg-orange-400";
     return "bg-red";
   };
 
-  const getArrow = (comparison: any) => {
+  const getArrow = (comparison: Comparison) => {
     if (comparison.isCorrect) return null;
     if (typeof comparison.guessValue === "number" && typeof comparison.correctValue === "number") {
       if (comparison.guessValue > comparison.correctValue) return <ArrowDown className="w-4 h-4" />;
@@ -344,7 +349,7 @@ export function GameBoard({ collection }: GameBoardProps) {
             <div className="relative z-20 bg-black/20 rounded-lg border border-white/10 sm:p-6 px-3 sm:px-4 py-4 sm:py-6 space-y-3 sm:space-y-4">
               {collectionExists === false && (
                 <div className="mb-4 p-4 bg-yellow-500/20 border border-yellow-500/30 rounded-lg text-yellow-400 text-sm text-center">
-                  ⚠️ La collection {collection.id} n'existe pas dans le contrat. Veuillez exécuter le script <code className="bg-black/30 px-2 py-1 rounded">initialize.ts</code> pour l'initialiser.
+                  ⚠️ La collection {collection.id} n&apos;existe pas dans le contrat. Veuillez exécuter le script <code className="bg-black/30 px-2 py-1 rounded">initialize.ts</code> pour l&apos;initialiser.
                 </div>
               )}
               {!isConnected ? (
