@@ -62,10 +62,10 @@ export default function GamePage() {
             <div className="relative z-10 text-center">
               <h2 className="text-3xl md:text-4xl mb-4 font-black tracking-tight">
                 <span className="bg-gradient-to-r from-violet-400 via-blue-400 to-violet-400 bg-clip-text text-transparent">
-                  Initialisation...
+                  Initializing...
                 </span>
               </h2>
-              <p className="text-muted-foreground text-lg">Chargement de l&apos;application...</p>
+              <p className="text-muted-foreground text-lg">Loading application...</p>
             </div>
           </div>
         </div>

@@ -253,33 +253,44 @@
     transform: translateY(-1px) !important;
   }
 
-  /* Texte de séparation */
+  /* Texte de séparation - "or use another wallet" - Centrer avec Tailwind */
+  [data-onchainkit="wallet-modal"] > div,
+  [role="dialog"] > div:first-child,
+  div[role="dialog"] > div:first-child {
+    @apply text-center !important;
+  }
+
   [data-onchainkit="wallet-modal"] p,
   [role="dialog"] p {
-    color: rgba(255, 255, 255, 0.5) !important;
-    text-align: center !important;
-    margin: 0.75rem 0 !important;
-    font-size: 0.8125rem !important;
-    background: transparent !important;
-    padding: 0 !important;
+    @apply text-center mx-auto !important;
   }
 
-  /* Supprimer le fond blanc du texte "or use another wallet" */
-  [data-onchainkit="wallet-modal"] p *,
-  [role="dialog"] p * {
-    background: transparent !important;
-    color: rgba(255, 255, 255, 0.5) !important;
-  }
-
-  /* Texte des termes */
+  /* Texte des termes - Terms of Service - Plus petit et centré avec gap horizontal */
   [data-onchainkit="wallet-modal"] small,
-  [role="dialog"] small {
-    color: rgba(255, 255, 255, 0.5) !important;
-    font-size: 0.75rem !important;
+  [role="dialog"] small,
+  [data-onchainkit="wallet-modal"] small.ock\:flex,
+  [role="dialog"] small.ock\:flex {
+    font-size: 0.625rem !important;
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+    align-items: center !important;
+    gap: 0.25rem !important;
     text-align: center !important;
-    display: block !important;
-    margin-top: 1.5rem !important;
-    line-height: 1.5 !important;
+    margin: 1.5rem auto 0 !important;
+    width: 100% !important;
+  }
+
+  /* Tous les enfants du small pour réduire la taille et forcer le gap */
+  [data-onchainkit="wallet-modal"] small *,
+  [role="dialog"] small *,
+  [data-onchainkit="wallet-modal"] small span,
+  [role="dialog"] small span,
+  [data-onchainkit="wallet-modal"] small a,
+  [role="dialog"] small a {
+    font-size: 0.625rem !important;
+    display: inline-block !important;
   }
 
   /* Bouton de fermeture */

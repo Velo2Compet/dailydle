@@ -1,7 +1,8 @@
 "use client";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract } from "wagmi";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useChainId, useSwitchChain } from "wagmi";
 import { useState, useEffect, useCallback } from "react";
 import { parseAbi } from "viem";
+import { base } from "wagmi/chains";
 import { GameState, GuessResult, Character, Collection } from "@/types/game";
 import { getDailyCharacter, hashCharacter, compareAttributes, getCurrentDay } from "@/utils/game";
 
@@ -30,6 +31,8 @@ const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string
  */
 export function useMakeGuess() {
   const { address } = useAccount();
+  const chainId = useChainId();
+  const { switchChain } = useSwitchChain();
   const { writeContract, data: hash, isPending, error } = useWriteContract();
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
     hash,
@@ -40,6 +43,7 @@ export function useMakeGuess() {
     address: CONTRACT_ADDRESS,
     abi: CONTRACT_ABI,
     functionName: "feePerGuess",
+    chainId: base.id, // Forcer Base pour la lecture
     query: {
       enabled: !!CONTRACT_ADDRESS && CONTRACT_ADDRESS !== "0x0000000000000000000000000000000000000000",
     },
@@ -51,6 +55,17 @@ export function useMakeGuess() {
         throw new Error("Wallet not connected");
       }
 
+      // Vérifier et forcer Base (chainId 8453)
+      if (chainId !== base.id) {
+        try {
+          await switchChain({ chainId: base.id });
+          // Attendre un peu pour que le switch soit effectif
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } catch (switchError) {
+          throw new Error("Please switch to Base network to make a guess");
+        }
+      }
+
       // Utiliser les frais récupérés, ou 1000000000 wei (0.000001 ETH) par défaut
       const feeAmount = fee ? BigInt(fee.toString()) : BigInt("1000000000");
 
@@ -60,9 +75,10 @@ export function useMakeGuess() {
         functionName: "makeGuess",
         args: [BigInt(collectionId), BigInt(characterId)],
         value: feeAmount,
+        chainId: base.id, // Forcer Base explicitement
       });
     },
-    [writeContract, address, fee]
+    [writeContract, address, fee, chainId, switchChain]
   );
 
   return {
@@ -100,6 +116,7 @@ export function useGameState(collection: Collection) {
     abi: CONTRACT_ABI,
     functionName: "getDailyCharacterId",
     args: [BigInt(collection.id)],
+    chainId: base.id, // Forcer Base
     query: {
       enabled: !!collection.id,
     },
@@ -111,6 +128,7 @@ export function useGameState(collection: Collection) {
     abi: CONTRACT_ABI,
     functionName: "getAttempts",
     args: address ? [address as `0x${string}`, BigInt(collection.id), BigInt(currentDay)] : undefined,
+    chainId: base.id, // Forcer Base
     query: {
       enabled: !!address,
       refetchInterval: false,
@@ -123,6 +141,7 @@ export function useGameState(collection: Collection) {
     abi: CONTRACT_ABI,
     functionName: "getPlayerGuesses",
     args: address ? [address as `0x${string}`, BigInt(collection.id)] : undefined,
+    chainId: base.id, // Forcer Base
     query: {
       enabled: !!address,
       refetchInterval: false, // Pas de polling automatique
@@ -211,6 +230,7 @@ export function useVerifyGuess(collectionId: number, characterId: number) {
     abi: CONTRACT_ABI,
     functionName: "verifyGuess",
     args: [BigInt(collectionId), BigInt(characterId)],
+    chainId: base.id, // Forcer Base
   });
 
   return isCorrect;
@@ -244,6 +264,7 @@ export function usePlayerStats(address?: `0x${string}`) {
     abi: CONTRACT_ABI,
     functionName: "getTotalWins",
     args: address ? [address] : undefined,
+    chainId: base.id, // Forcer Base
     query: {
       enabled: !!address,
     },
@@ -262,6 +283,7 @@ export function useGlobalTotalWins() {
     address: CONTRACT_ADDRESS,
     abi: CONTRACT_ABI,
     functionName: "getGlobalTotalWins",
+    chainId: base.id, // Forcer Base
     query: {
       enabled: !!CONTRACT_ADDRESS && CONTRACT_ADDRESS !== "0x0000000000000000000000000000000000000000",
     },
@@ -285,6 +307,7 @@ export function useCollectionStats(collectionId: number) {
     abi: CONTRACT_ABI,
     functionName: "getWinsPerCollection",
     args: address ? [address as `0x${string}`, BigInt(collectionId)] : undefined,
+    chainId: base.id, // Forcer Base
     query: {
       enabled: !!address,
     },
@@ -296,6 +319,7 @@ export function useCollectionStats(collectionId: number) {
     abi: CONTRACT_ABI,
     functionName: "getWinnersTodayCount",
     args: [BigInt(collectionId), BigInt(currentDay)],
+    chainId: base.id, // Forcer Base
   });
 
   // Nombre total de personnes qui ont trouvé de tous temps
@@ -304,6 +328,7 @@ export function useCollectionStats(collectionId: number) {
     abi: CONTRACT_ABI,
     functionName: "getTotalWinnersCount",
     args: [BigInt(collectionId)],
+    chainId: base.id, // Forcer Base
   });
 
   return {

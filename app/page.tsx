@@ -26,7 +26,7 @@ export default function Home() {
       alignItems: "center", 
       minHeight: "100vh" 
     }}>
-      <p>Redirection vers le jeu...</p>
+      <p>Redirecting to game...</p>
     </div>
   );
 }

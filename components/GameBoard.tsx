@@ -75,13 +75,13 @@ export function GameBoard({ collection }: GameBoardProps) {
     
     // Vérifier que la collection existe dans le contrat
     if (collectionExists === false) {
-      setErrorMessage(`La collection ${collection.id} n'existe pas dans le contrat. Veuillez l'initialiser d'abord avec le script initialize.ts`);
+      setErrorMessage(`Collection ${collection.id} does not exist in the contract. Please initialize it first with the initialize.ts script`);
       return;
     }
     
     // Vérifier si ce personnage a déjà été deviné
     if (alreadyGuessed(selectedCharacterId)) {
-      setErrorMessage("Vous avez déjà deviné ce personnage aujourd'hui.");
+      setErrorMessage("You have already guessed this character today.");
       return;
     }
 
@@ -100,13 +100,13 @@ export function GameBoard({ collection }: GameBoardProps) {
     } catch (err: unknown) {
       console.error("Error making guess:", err);
       const errorObj = err as { message?: string };
-      let errorMsg = errorObj?.message || String(err) || "Une erreur est survenue lors de la soumission.";
+      let errorMsg = errorObj?.message || String(err) || "An error occurred during submission.";
       
       // Messages d'erreur plus clairs
       if (errorMsg.includes("Collection does not exist") || errorMsg.includes("Collection has no characters")) {
-        errorMsg = `La collection ${collection.id} n'est pas initialisée dans le contrat. Veuillez exécuter le script initialize.ts d'abord.`;
+        errorMsg = `Collection ${collection.id} is not initialized in the contract. Please run the initialize.ts script first.`;
       } else if (errorMsg.includes("execution reverted") || errorMsg.includes("revert")) {
-        errorMsg = "La transaction a échoué. Vérifiez que la collection est bien initialisée dans le contrat.";
+        errorMsg = "Transaction failed. Check that the collection is properly initialized in the contract.";
       }
       
       setErrorMessage(errorMsg);
@@ -116,7 +116,7 @@ export function GameBoard({ collection }: GameBoardProps) {
   // Afficher les erreurs de transaction
   useEffect(() => {
     if (error) {
-      const errorMsg = error.message || String(error) || "Erreur de transaction";
+      const errorMsg = error.message || String(error) || "Transaction error";
       setErrorMessage(errorMsg);
     } else if (!isPending && !isConfirming) {
       // Réinitialiser l'erreur quand la transaction est terminée
@@ -269,10 +269,10 @@ export function GameBoard({ collection }: GameBoardProps) {
             <div className="relative z-10 text-center">
               <h2 className="text-3xl md:text-4xl mb-4 font-black tracking-tight">
                 <span className="bg-gradient-to-r from-violet-400 via-blue-400 to-violet-400 bg-clip-text text-transparent">
-                  Initialisation...
+                  Initializing...
                 </span>
               </h2>
-              <p className="text-muted-foreground text-lg">Chargement de l&apos;application...</p>
+              <p className="text-muted-foreground text-lg">Loading application...</p>
             </div>
           </div>
         </div>
@@ -321,16 +321,16 @@ export function GameBoard({ collection }: GameBoardProps) {
         {/* Stats */}
         <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
           <div className="flex items-center gap-2 bg-gradient-to-r from-violet-600/20 to-blue-600/20 border border-violet-500/30 rounded-xl px-4 py-2">
-            <StatItem label="Tentatives journalières" value={gameState.attempts} />
+            <StatItem label="Daily attempts" value={gameState.attempts} />
           </div>
           <div className="flex items-center gap-2 bg-gradient-to-r from-violet-600/20 to-blue-600/20 border border-violet-500/30 rounded-xl px-4 py-2">
-            <StatItem label="Vos victoires" value={collectionStats.userWins} />
+            <StatItem label="Your wins" value={collectionStats.userWins} />
           </div>
           <div className="flex items-center gap-2 bg-gradient-to-r from-violet-600/20 to-blue-600/20 border border-violet-500/30 rounded-xl px-4 py-2">
-            <StatItem label="Trouvés aujourd'hui" value={collectionStats.winnersToday} />
+            <StatItem label="Found today" value={collectionStats.winnersToday} />
           </div>
           <div className="flex items-center gap-2 bg-gradient-to-r from-violet-600/20 to-blue-600/20 border border-violet-500/30 rounded-xl px-4 py-2">
-            <StatItem label="Trouvés au total" value={collectionStats.totalWinners} />
+            <StatItem label="Total found" value={collectionStats.totalWinners} />
           </div>
         </div>
 
@@ -338,9 +338,9 @@ export function GameBoard({ collection }: GameBoardProps) {
         {gameState.isGameWon && (
           <div className="w-full relative bg-gradient-to-r from-[#121217] via-[#1a1a2e] to-[#121217] border border-violet-500/20 rounded-2xl shadow-xl shadow-violet-500/10 p-4 sm:p-6">
             <div className="text-center">
-              <h2 className="text-2xl font-bold text-white mb-2">🎉 Félicitations !</h2>
+              <h2 className="text-2xl font-bold text-white mb-2">🎉 Congratulations!</h2>
               <p className="text-muted-foreground">
-                Vous avez trouvé le personnage en {gameState.attempts} tentative(s) !
+                You found the character in {gameState.attempts} attempt(s)!
               </p>
             </div>
           </div>
@@ -354,15 +354,15 @@ export function GameBoard({ collection }: GameBoardProps) {
             <div className="relative z-20 bg-black/20 rounded-lg border border-white/10 sm:p-6 px-3 sm:px-4 py-4 sm:py-6 space-y-3 sm:space-y-4">
               {collectionExists === false && (
                 <div className="mb-4 p-4 bg-yellow-500/20 border border-yellow-500/30 rounded-lg text-yellow-400 text-sm text-center">
-                  ⚠️ La collection {collection.id} n&apos;existe pas dans le contrat. Veuillez exécuter le script <code className="bg-black/30 px-2 py-1 rounded">initialize.ts</code> pour l&apos;initialiser.
+                  ⚠️ Collection {collection.id} does not exist in the contract. Please run the <code className="bg-black/30 px-2 py-1 rounded">initialize.ts</code> script to initialize it.
                 </div>
               )}
               {!isConnected ? (
                 <p className="text-center text-white mb-4">
-                  Connectez votre wallet pour commencer à jouer
+                  Connect your wallet to start playing
                 </p>
               ) : (
-                <p className="text-center text-white mb-4">Recherche et choisis un personnage pour commencer...</p>
+                <p className="text-center text-white mb-4">Search and choose a character to get started...</p>
               )}
               <div className="flex flex-col sm:flex-row items-start justify-center gap-3 sm:gap-3">
                 <div className="flex-1 w-full sm:max-w-none">
@@ -409,8 +409,8 @@ export function GameBoard({ collection }: GameBoardProps) {
 
               {(isPending || isConfirming) && (
                 <div className="mt-3 sm:mt-4 text-center text-muted-foreground">
-                  <p>Transaction en cours...</p>
-                  <p className="text-sm">Veuillez patienter pendant la confirmation de votre proposition.</p>
+                  <p>Transaction in progress...</p>
+                  <p className="text-sm">Please wait while your guess is being confirmed.</p>
                 </div>
               )}
             </div>
@@ -423,7 +423,7 @@ export function GameBoard({ collection }: GameBoardProps) {
                 {/* En-têtes */}
                 <div className="flex gap-3 w-auto sm:flex-row min-w-28 sm:flex flex-col">
                   <div className="text-center font-semibold sm:border-b-4 border-b-0 pb-2 flex-1 min-w-24 sm:block flex items-center justify-center text-white">
-                    Personnage
+                    Character
                   </div>
                   {collection.attributes.map((attr) => (
                     <div key={attr.name} className="text-center font-semibold sm:border-b-4 border-b-0 pb-2 flex-1 min-w-24 sm:block flex items-center justify-center text-white">

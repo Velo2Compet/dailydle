@@ -8,6 +8,7 @@ export function RootProvider({ children }: { children: ReactNode }) {
     <OnchainKitProvider
       apiKey={process.env.NEXT_PUBLIC_ONCHAINKIT_API_KEY}
       chain={base}
+      chains={[base]} // Forcer uniquement Base comme chaîne supportée
       config={{
         appearance: {
           mode: "auto",
