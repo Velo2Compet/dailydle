@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useAccount } from "wagmi";
 import { useMiniKit } from "@coinbase/onchainkit/minikit";
-import { Collection, GuessResult } from "@/types/game";
+import { Collection } from "@/types/game";
 import { CharacterSelector } from "./CharacterSelector";
 import { GameHeader } from "./GameHeader";
 import { WalletButton } from "./WalletButton";

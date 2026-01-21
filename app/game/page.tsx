@@ -31,7 +31,7 @@ export default function GamePage() {
                   Initialisation...
                 </span>
               </h2>
-              <p className="text-muted-foreground text-lg">Chargement de l'application...</p>
+              <p className="text-muted-foreground text-lg">Chargement de l&apos;application...</p>
             </div>
           </div>
         </div>
