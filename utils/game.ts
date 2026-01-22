@@ -2,11 +2,12 @@ import { Collection, Character, AttributeComparison, GuessResult } from "@/types
 import { keccak256, toBytes, stringToBytes } from "viem";
 
 /**
- * Normalise un personnage pour avoir une structure cohérente
- * Les attributs peuvent être directement sur l'objet ou dans character.attributes
+ * Normalise un personnage pour avoir une structure cohérente.
+ * Les attributs peuvent être directement sur l'objet ou dans character.attributes.
+ * Exclut id, name, imageUrl, picture, slug et champs techniques API.
  */
 export function normalizeCharacter(character: any): Character {
-  const excludeKeys = ['id', 'name', 'imageUrl'];
+  const excludeKeys = ['id', 'name', 'imageUrl', 'picture', 'slug', 'createdAt', 'updatedAt'];
   const attributes: Record<string, string | string[] | number> = {};
   
   // Si character.attributes existe et est un objet, l'utiliser

@@ -7,9 +7,13 @@
    PRIVATE_KEY=votre_cle_privee_sans_0x
    BASE_SEPOLIA_RPC_URL=https://sepolia.base.org
    NEXT_PUBLIC_CONTRACT_ADDRESS= (sera rempli après le déploiement)
+   QUIZZDLE_API_KEY=votre_cle_api_quizzdle
+   QUIZZDLE_API_URL=https://quizzdle.fr
    ```
    
    **Note** : `NEXT_PUBLIC_CONTRACT_ADDRESS` est utilisée à la fois par le frontend Next.js et les scripts Hardhat. Vous pouvez aussi utiliser `CONTRACT_ADDRESS` pour les scripts si vous préférez, mais `NEXT_PUBLIC_CONTRACT_ADDRESS` fonctionne partout.
+
+   **Quizzdle API** : `QUIZZDLE_API_KEY` et optionnellement `QUIZZDLE_API_URL` servent à appeler l’API Quizzdle (`/api/public/categories`, `/api/public/categories/{id}`) pour la page d’accueil, la liste des catégories et le jeu. Sans clé, les appels échoueront.
 
 2. Avoir des fonds sur Base Sepolia (pour payer les frais de gas)
 
@@ -172,10 +176,10 @@ Une fois le contrat déployé et initialisé :
    npm run dev
    ```
 
-2. Allez sur `http://localhost:3000/game`
+2. Allez sur `http://localhost:3000` (page d’accueil avec catégories Quizzdle).
 
-3. Connectez votre wallet
+3. Choisissez une collection puis `http://localhost:3000/game/[categoryId]`.
 
-4. Testez une proposition de personnage
+4. Connectez votre wallet et testez une proposition de personnage.
 
-Le frontend devrait maintenant utiliser le nouveau contrat et récupérer le personnage du jour depuis la liste d'IDs stockée on-chain.
+Le frontend utilise l’API Quizzdle pour les catégories et le jeu, et le contrat pour le personnage du jour et les guesses on-chain.

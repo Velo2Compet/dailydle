@@ -1,32 +1,7 @@
-"use client";
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useMiniKit } from "@coinbase/onchainkit/minikit";
+import { fetchCategories } from "@/lib/quizzdle-api";
+import { HomeView } from "@/components/HomeView";
 
-export default function Home() {
-  const { isFrameReady, setFrameReady } = useMiniKit();
-  const router = useRouter();
-
-  // Initialize the miniapp
-  useEffect(() => {
-    if (!isFrameReady) {
-      setFrameReady();
-    }
-  }, [setFrameReady, isFrameReady]);
-
-  // Rediriger vers la page de jeu
-  useEffect(() => {
-    router.push("/game");
-  }, [router]);
-
-  return (
-    <div style={{ 
-      display: "flex", 
-      justifyContent: "center", 
-      alignItems: "center", 
-      minHeight: "100vh" 
-    }}>
-      <p>Redirecting to game...</p>
-    </div>
-  );
+export default async function Home() {
+  const categories = await fetchCategories();
+  return <HomeView categories={categories} />;
 }

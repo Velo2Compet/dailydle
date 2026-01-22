@@ -7,15 +7,19 @@ import { StatItem } from "./StatItem";
 import { LogOut } from "lucide-react";
 import Link from "next/link";
 
-export function GameHeader() {
+interface GameHeaderProps {
+  className?: string;
+}
+
+export function GameHeader({ className }: GameHeaderProps) {
   const { address, isConnected } = useAccount();
   const { disconnect } = useDisconnect();
   const { totalWins } = usePlayerStats(address);
   const { globalTotalWins } = useGlobalTotalWins();
 
   return (
-    <header className="w-full border-b border-violet-500/20 bg-gradient-to-r from-[#121217] via-[#1a1a2e] to-[#121217] sticky top-0 z-50">
-      <div className="container mx-auto px-2 sm:px-4 py-2 sm:py-4">
+    <header className={`w-full border-b border-violet-500/20 bg-gradient-to-r from-[#121217] via-[#1a1a2e] to-[#121217] sticky top-0 z-50 ${className ?? ""}`.trim()}>
+      <div className="relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
         <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-0">
           {/* Logo et statistiques */}
           <div className="flex items-center gap-1 sm:gap-2 md:gap-4 flex-wrap">
