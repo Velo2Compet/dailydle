@@ -1,9 +1,9 @@
 const ROOT_URL =
   process.env.NEXT_PUBLIC_URL ||
   (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : 'http://localhost:3000');
-const header = process.env.HEADER;
-const payload = process.env.PAYLOAD;
-const signature = process.env.SIGNATURE;
+const header = process.env.HEADER ?? "";
+const payload = process.env.PAYLOAD ?? "";
+const signature = process.env.SIGNATURE ?? "";
 
 /**
  * MiniApp configuration object. Must follow the Farcaster MiniApp specification.
