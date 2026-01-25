@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAccount } from "wagmi";
 import { useMiniKit } from "@coinbase/onchainkit/minikit";
 import { Collection } from "@/types/game";
@@ -12,6 +12,95 @@ import { useMakeGuess, useGameState, useCollectionStats } from "@/hooks/useGame"
 import { useReadContract } from "wagmi";
 import { formatAttributeValue } from "@/utils/game";
 import { ArrowDown, ArrowUp } from "lucide-react";
+
+// Composant Tooltip personnalisé pour mobile et desktop
+function MobileTooltip({
+  content,
+  children
+}: {
+  content: string;
+  children: React.ReactNode;
+}) {
+  const [position, setPosition] = useState({ top: 0, left: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // DEBUG: Toujours afficher et mettre à jour la position
+  useEffect(() => {
+    const updatePosition = () => {
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        setPosition({
+          top: rect.top - 8,
+          left: rect.left + rect.width / 2
+        });
+      }
+    };
+    updatePosition();
+    window.addEventListener('scroll', updatePosition);
+    window.addEventListener('resize', updatePosition);
+    return () => {
+      window.removeEventListener('scroll', updatePosition);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, []);
+
+  return (
+    <>
+      <div
+        ref={containerRef}
+        className="w-full h-full cursor-pointer"
+      >
+        {children}
+      </div>
+      {/* DEBUG: Toujours visible */}
+      {position.top > 0 && (
+        <div
+          className="fixed z-[99999] pointer-events-none"
+          style={{
+            top: position.top,
+            left: position.left,
+            transform: 'translate(-50%, -100%)'
+          }}
+        >
+          <div className="relative pb-2">
+            <div
+              className="text-white text-sm px-4 py-2.5 rounded-lg min-w-[80px] max-w-[280px] text-center whitespace-normal"
+              style={{
+                backgroundColor: '#1a1a2e',
+                border: '2px solid #8b5cf6',
+                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.9)'
+              }}
+            >
+              {content}
+            </div>
+            <div
+              className="absolute left-1/2 -translate-x-1/2"
+              style={{
+                bottom: '0',
+                width: 0,
+                height: 0,
+                borderLeft: '10px solid transparent',
+                borderRight: '10px solid transparent',
+                borderTop: '10px solid #8b5cf6'
+              }}
+            />
+            <div
+              className="absolute left-1/2 -translate-x-1/2"
+              style={{
+                bottom: '2px',
+                width: 0,
+                height: 0,
+                borderLeft: '8px solid transparent',
+                borderRight: '8px solid transparent',
+                borderTop: '8px solid #1a1a2e'
+              }}
+            />
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
 
 interface GameBoardProps {
   collection: Collection;
@@ -328,12 +417,24 @@ export function GameBoard({ collection }: GameBoardProps) {
       <div className="flex justify-center items-center px-2 sm:px-4 container mx-auto w-full max-w-[1200px] flex-1 py-4 sm:py-8">
         <div className="w-full space-y-3 sm:space-y-6">
           {/* Header */}
-          <div className="text-center flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 mb-4 sm:mb-12">
+          <div className="text-center flex flex-col items-center justify-center gap-1 mb-4 sm:mb-6">
             <h1 className="text-3xl md:text-4xl font-black tracking-tight flex items-center">
               <span className="bg-gradient-to-r from-violet-400 via-blue-400 to-violet-400 bg-clip-text text-transparent">
                 {collection.name}
               </span>
             </h1>
+            <span className="text-xs text-muted-foreground">
+              a{" "}
+              <a
+                href={`https://quizzdle.fr/en/${collection.slug || ""}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-violet-400 underline hover:no-underline transition-all"
+              >
+                quizzdle.fr
+              </a>{" "}
+              powered game
+            </span>
           </div>
 
         {/* Message de victoire */}
@@ -419,51 +520,54 @@ export function GameBoard({ collection }: GameBoardProps) {
 
           {/* Tableau des résultats */}
           {gameState.guesses.length > 0 && (
-            <div className="relative z-10 mt-4 sm:mt-6">
-              <div className="flex sm:flex-col sm:!overflow-hidden flex-row overflow-hidden">
-                {/* En-têtes */}
-                <div className="flex gap-3 w-auto sm:flex-row min-w-28 sm:flex flex-col">
-                  <div className="text-center font-semibold sm:border-b-4 border-b-0 pb-2 flex-1 min-w-24 sm:block flex items-center justify-center text-white">
-                    Character
+            <div className="relative z-10 mt-4 overflow-hidden">
+              {/* Container avec largeur minimale pour forcer le scroll horizontal si nécessaire */}
+              <div className="min-w-full overflow-hidden">
+                {/* En-têtes - toujours sur une ligne */}
+                <div
+                  className="grid gap-1 sm:gap-2 mb-2"
+                  style={{ gridTemplateColumns: `repeat(${collection.attributes.length + 1}, minmax(0, 1fr))` }}
+                >
+                  <div className="text-center font-semibold text-[10px] sm:text-xs text-white truncate px-1">
+                    Personnage
                   </div>
                   {collection.attributes.map((attr) => (
-                    <div key={attr.name} className="text-center font-semibold sm:border-b-4 border-b-0 pb-2 flex-1 min-w-24 sm:block flex items-center justify-center text-white">
+                    <div key={attr.name} className="text-center font-semibold text-[10px] sm:text-xs text-white truncate px-1">
                       {attr.nameFront}
                     </div>
                   ))}
                 </div>
 
-                {/* Lignes de résultats */}
-                <div className="flex sm:flex-col-reverse gap-2 sm:gap-4 sm:mt-2 mt-0 flex-row-reverse overflow-auto">
+                {/* Lignes de résultats - du plus récent en haut */}
+                <div className="flex flex-col-reverse gap-1 sm:gap-2">
                   {gameState.guesses.map((guess, index) => {
                     const revealed = revealedColumns.get(index);
-                    // Vérifier si cette proposition est complètement révélée (pas d'animation en cours)
                     const isFullyRevealed = fullyRevealedGuesses.has(index);
-                    // Si la proposition est en cours d'animation (dans le Map mais pas complètement révélée)
-                    // OU si elle n'est pas du tout dans le Map (nouveau guess qui n'a pas encore commencé l'animation)
                     const isCurrentlyAnimating = !isFullyRevealed;
-                    // Pour les propositions en cours d'animation, on vérifie si chaque colonne est révélée
-                    // Pour les autres (complètement révélées), on révèle tout par défaut
                     const isPersonnageRevealed = isCurrentlyAnimating ? (revealed?.has(0) ?? false) : true;
-                    
+
                     return (
-                      <div key={index} className="flex gap-3 w-auto sm:flex-row flex-col">
+                      <div
+                        key={index}
+                        className="grid gap-1 sm:gap-2"
+                        style={{ gridTemplateColumns: `repeat(${collection.attributes.length + 1}, minmax(0, 1fr))` }}
+                      >
                         {/* Colonne personnage */}
-                        <div className="min-w-24 min-h-16 flex-1">
-                          <div className={`min-h-16 bg-white/10 border border-white/10 rounded flex items-center justify-center text-center min-w-24 flex-1 transition-opacity duration-300 ${isPersonnageRevealed ? 'opacity-100' : 'opacity-0'}`}>
-                            <div className="w-full h-full relative flex items-center justify-center gap-2 p-2">
+                        <div className={`h-12 sm:h-14 bg-white/10 border border-white/10 rounded transition-opacity duration-300 overflow-hidden ${isPersonnageRevealed ? 'opacity-100' : 'opacity-0'}`}>
+                          <MobileTooltip content={guess.characterName}>
+                            <div className="flex items-center justify-center gap-1 px-1 w-full h-full">
                               {guess.characterImage && (
                                 <img
                                   src={guess.characterImage}
                                   alt={guess.characterName}
-                                  className="w-10 h-10 rounded object-cover hidden sm:block"
+                                  className="w-6 h-6 sm:w-8 sm:h-8 rounded object-cover flex-shrink-0"
                                 />
                               )}
-                              <div className="text-white text-sm font-medium truncate">
+                              <span className="text-white text-[9px] sm:text-xs font-medium truncate">
                                 {guess.characterName}
-                              </div>
+                              </span>
                             </div>
-                          </div>
+                          </MobileTooltip>
                         </div>
 
                         {/* Colonnes attributs */}
@@ -471,38 +575,28 @@ export function GameBoard({ collection }: GameBoardProps) {
                           const attrType = collection.attributes[compIndex]?.type;
                           const statusClass = getStatusClass(comparison);
                           const arrow = getArrow(comparison, attrType);
-                          const columnIndex = compIndex + 1; // +1 car la colonne personnage est à l'index 0
-                          // Pour les propositions en cours d'animation, vérifier si la colonne est révélée
-                          // Si révélé est undefined (pas encore initialisé), la colonne n'est pas révélée
-                          // Pour les autres (complètement révélées), révéler par défaut
+                          const columnIndex = compIndex + 1;
                           const isRevealed = isCurrentlyAnimating ? (revealed?.has(columnIndex) ?? false) : true;
-                          
+
                           return (
-                            <div key={compIndex} className="flex-1 perspective min-w-24">
-                              <div className={`relative w-full h-16 preserve-3d transform-style transition-transform duration-500 ${isRevealed ? 'rotate-y-180' : 'rotate-y-0'}`}>
-                                {/* Face avant (cachée) */}
-                                <div className="absolute inset-0 flex items-center justify-center bg-white/5 border border-white/10 text-white rounded backface-hidden"></div>
-                                
-                                {/* Face arrière (résultat) */}
-                                <div className={`absolute inset-0 flex items-center justify-center text-white rounded backface-hidden rotate-y-180 px-2 ${statusClass}`}>
-                                  <div className="relative w-full flex items-center justify-center text-center">
-                                    <div className="flex items-end justify-center gap-1 w-full text-sm">
+                            <MobileTooltip key={compIndex} content={formatAttributeValue(comparison.guessValue)}>
+                              <div className="perspective overflow-hidden h-12 sm:h-14">
+                                <div className={`relative w-full h-full preserve-3d transform-style transition-transform duration-500 ${isRevealed ? 'rotate-y-180' : 'rotate-y-0'}`}>
+                                  {/* Face avant (cachée) */}
+                                  <div className="absolute inset-0 flex items-center justify-center bg-white/5 border border-white/10 text-white rounded backface-hidden"></div>
+
+                                  {/* Face arrière (résultat) */}
+                                  <div className={`absolute inset-0 text-white rounded backface-hidden rotate-y-180 ${statusClass}`}>
+                                    <div className="flex items-center justify-center gap-0.5 w-full h-full px-1">
                                       {arrow}
-                                      <span 
-                                        className="line-clamp-2 overflow-hidden text-ellipsis"
-                                        style={{
-                                          display: '-webkit-box',
-                                          WebkitBoxOrient: 'vertical',
-                                          WebkitLineClamp: 2,
-                                        }}
-                                      >
+                                      <span className="text-[9px] sm:text-xs text-center truncate leading-tight">
                                         {formatAttributeValue(comparison.guessValue)}
                                       </span>
                                     </div>
                                   </div>
                                 </div>
                               </div>
-                            </div>
+                            </MobileTooltip>
                           );
                         })}
                       </div>

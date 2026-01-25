@@ -39,8 +39,9 @@ export function CharacterSelector({
 
     const query = searchTerm.toLowerCase();
     return characters
-      .filter((c) => c.name.toLowerCase().includes(query))
+      .filter((c) => c.name.toLowerCase().startsWith(query))
       .filter((c) => !isCharacterDisabled(c.id))
+      .sort((a, b) => a.name.localeCompare(b.name))
       .slice(0, 20);
   }, [searchTerm, characters, disabledCharacters]);
 

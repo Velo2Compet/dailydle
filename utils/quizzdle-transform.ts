@@ -70,6 +70,7 @@ export function quizzdleCategoryToCollection(
   return {
     id: raw.id,
     name: raw.name,
+    slug: raw.slug ?? undefined,
     color: raw.color ?? undefined,
     bgImage: raw.bgImage ?? raw.background_image ?? undefined,
     attributes,

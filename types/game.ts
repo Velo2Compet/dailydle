@@ -18,6 +18,7 @@ export interface Character {
 export interface Collection {
   id: number;
   name: string;
+  slug?: string;
   color?: string;
   bgImage?: string;
   attributes: Attribute[];
