@@ -306,11 +306,18 @@ export function GameBoard({ collection }: GameBoardProps) {
     return "bg-red";
   };
 
-  const getArrow = (comparison: Comparison) => {
+  const getArrow = (comparison: Comparison, attrType?: string) => {
     if (comparison.isCorrect) return null;
-    if (typeof comparison.guessValue === "number" && typeof comparison.correctValue === "number") {
-      if (comparison.guessValue > comparison.correctValue) return <ArrowDown className="w-4 h-4" />;
-      if (comparison.guessValue < comparison.correctValue) return <ArrowUp className="w-4 h-4" />;
+
+    // Pour les attributs de type int, afficher les flèches
+    if (attrType === "int") {
+      const guessNum = Number(comparison.guessValue);
+      const correctNum = Number(comparison.correctValue);
+
+      if (!isNaN(guessNum) && !isNaN(correctNum)) {
+        if (guessNum > correctNum) return <ArrowDown className="w-4 h-4" />;
+        if (guessNum < correctNum) return <ArrowUp className="w-4 h-4" />;
+      }
     }
     return null;
   };
@@ -318,7 +325,7 @@ export function GameBoard({ collection }: GameBoardProps) {
   return (
     <div className="flex flex-col min-h-screen">
       <StatsHeader />
-      <div className="flex justify-center px-2 sm:px-4 container mx-auto w-full max-w-[1200px] flex-1 py-4 sm:py-12">
+      <div className="flex justify-center items-center px-2 sm:px-4 container mx-auto w-full max-w-[1200px] flex-1 py-4 sm:py-8">
         <div className="w-full space-y-3 sm:space-y-6">
           {/* Header */}
           <div className="text-center flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 mb-4 sm:mb-12">
@@ -342,10 +349,7 @@ export function GameBoard({ collection }: GameBoardProps) {
         )}
 
         {/* Zone de jeu */}
-        <div className="w-full relative bg-gradient-to-r from-[#121217] via-[#1a1a2e] to-[#121217] border border-violet-500/20 rounded-2xl shadow-xl shadow-violet-500/10 sm:p-6 px-2 py-4 sm:py-6 space-y-3 sm:space-y-4">
-          <div className="absolute inset-0 bg-gradient-to-r from-violet-500/5 via-blue-500/5 to-violet-500/5 pointer-events-none rounded-2xl"></div>
-          
-          {!gameState.isGameOver && (
+        {!gameState.isGameOver && (
             <div className="relative z-20 bg-black/20 rounded-lg border border-white/10 sm:p-6 px-3 sm:px-4 py-4 sm:py-6 space-y-3 sm:space-y-4">
               {collectionExists === false && (
                 <div className="mb-4 p-4 bg-yellow-500/20 border border-yellow-500/30 rounded-lg text-yellow-400 text-sm text-center">
@@ -362,7 +366,7 @@ export function GameBoard({ collection }: GameBoardProps) {
               <div className="flex flex-col sm:flex-row items-start justify-center gap-3 sm:gap-3">
                 <div className="flex-1 w-full sm:max-w-none">
                   <CharacterSelector
-                    categoryId={collection.id}
+                    characters={collection.characters || []}
                     selectedCharacterId={selectedCharacterId}
                     selectedCharacterName={selectedCharacterName}
                     selectedCharacterImage={selectedCharacterImage}
@@ -447,8 +451,15 @@ export function GameBoard({ collection }: GameBoardProps) {
                         {/* Colonne personnage */}
                         <div className="min-w-24 min-h-16 flex-1">
                           <div className={`min-h-16 bg-white/10 border border-white/10 rounded flex items-center justify-center text-center min-w-24 flex-1 transition-opacity duration-300 ${isPersonnageRevealed ? 'opacity-100' : 'opacity-0'}`}>
-                            <div className="w-full h-full relative flex items-center justify-center gap-4 p-2">
-                              <div className="hidden sm:block text-white text-sm font-medium">
+                            <div className="w-full h-full relative flex items-center justify-center gap-2 p-2">
+                              {guess.characterImage && (
+                                <img
+                                  src={guess.characterImage}
+                                  alt={guess.characterName}
+                                  className="w-10 h-10 rounded object-cover hidden sm:block"
+                                />
+                              )}
+                              <div className="text-white text-sm font-medium truncate">
                                 {guess.characterName}
                               </div>
                             </div>
@@ -457,8 +468,9 @@ export function GameBoard({ collection }: GameBoardProps) {
 
                         {/* Colonnes attributs */}
                         {guess.comparisons.map((comparison, compIndex) => {
+                          const attrType = collection.attributes[compIndex]?.type;
                           const statusClass = getStatusClass(comparison);
-                          const arrow = getArrow(comparison);
+                          const arrow = getArrow(comparison, attrType);
                           const columnIndex = compIndex + 1; // +1 car la colonne personnage est à l'index 0
                           // Pour les propositions en cours d'animation, vérifier si la colonne est révélée
                           // Si révélé est undefined (pas encore initialisé), la colonne n'est pas révélée
@@ -500,7 +512,6 @@ export function GameBoard({ collection }: GameBoardProps) {
               </div>
             </div>
           )}
-        </div>
         </div>
       </div>
       <GameFooter

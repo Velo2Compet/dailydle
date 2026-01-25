@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ReactNode, CSSProperties, MouseEvent } from "react";
+import { ReactNode, MouseEvent } from "react";
 
 export type StatCardVariant = "default" | "highlight" | "button";
 
@@ -16,55 +16,24 @@ interface StatCardProps {
   className?: string;
 }
 
-const baseStyle: CSSProperties = {
-  minWidth: "70px",
-  padding: "0.75rem 1rem",
-  borderRadius: "0.75rem",
-  color: "white",
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: "0.25rem",
-  fontSize: "0.875rem",
-  fontWeight: "500",
-  transition: "all 0.3s ease",
-};
-
-const variantStyles: Record<StatCardVariant, CSSProperties> = {
-  default: {
-    border: "1px solid rgba(255, 255, 255, 0.2)",
-    background: "rgba(255, 255, 255, 0.05)",
-  },
-  highlight: {
-    border: "1px solid rgba(168, 85, 247, 0.5)",
-    background: "rgba(168, 85, 247, 0.3)",
-  },
-  button: {
-    border: "1px solid rgba(168, 85, 247, 0.3)",
-    background: "linear-gradient(135deg, rgba(168, 85, 247, 0.2) 0%, rgba(59, 130, 246, 0.2) 100%)",
-    cursor: "pointer",
-  },
-};
-
-const hoverStyles: Record<StatCardVariant, CSSProperties> = {
-  default: {},
-  highlight: {},
-  button: {
-    background: "linear-gradient(135deg, rgba(168, 85, 247, 0.3) 0%, rgba(59, 130, 246, 0.3) 100%)",
-  },
+const variantClasses: Record<StatCardVariant, string> = {
+  default: "border-white/20 bg-white/5",
+  highlight: "border-violet-500/50 bg-violet-500/30",
+  button: "border-violet-500/30 bg-gradient-to-br from-violet-500/20 to-blue-500/20 cursor-pointer hover:from-violet-500/30 hover:to-blue-500/30",
 };
 
 function CardContent({ icon, value, label }: Pick<StatCardProps, "icon" | "value" | "label">) {
   return (
     <>
-      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", height: "24px" }}>
-        {icon}
+      <div className="flex items-center gap-1 sm:gap-2 h-4 sm:h-6">
+        <span className="[&>svg]:w-3 [&>svg]:h-3 sm:[&>svg]:w-4 sm:[&>svg]:h-4 md:[&>svg]:w-5 md:[&>svg]:h-5">
+          {icon}
+        </span>
         {value !== undefined && (
-          <span style={{ fontSize: "1.25rem", fontWeight: "600" }}>{value}</span>
+          <span className="text-sm sm:text-base md:text-xl font-semibold">{value}</span>
         )}
       </div>
-      <span style={{ fontSize: "0.7rem", opacity: 0.8 }}>{label}</span>
+      <span className="text-[8px] sm:text-[10px] md:text-xs opacity-80 whitespace-nowrap">{label}</span>
     </>
   );
 }
@@ -77,39 +46,29 @@ export function StatCard({
   onClick,
   variant = "default",
   flex = false,
-  className,
+  className = "",
 }: StatCardProps) {
-  const style: CSSProperties = {
-    ...baseStyle,
-    ...variantStyles[variant],
-    ...(flex ? { flex: 1, minWidth: "120px" } : {}),
-  };
-
-  const handleMouseEnter = (e: MouseEvent<HTMLElement>) => {
-    const hoverStyle = hoverStyles[variant];
-    if (hoverStyle.background) {
-      (e.currentTarget as HTMLElement).style.background = hoverStyle.background as string;
-    }
-  };
-
-  const handleMouseLeave = (e: MouseEvent<HTMLElement>) => {
-    const baseBackground = variantStyles[variant].background;
-    if (baseBackground) {
-      (e.currentTarget as HTMLElement).style.background = baseBackground as string;
-    }
-  };
+  const baseClasses = `
+    min-w-0 flex-shrink
+    px-2 py-1.5 sm:px-3 sm:py-2 md:px-4 md:py-3
+    rounded-lg sm:rounded-xl
+    text-white
+    flex flex-col items-center justify-center
+    gap-0.5 sm:gap-1
+    text-xs sm:text-sm
+    font-medium
+    transition-all duration-300
+    border
+    ${variantClasses[variant]}
+    ${flex ? "flex-1" : ""}
+    ${className}
+  `.trim();
 
   // Si c'est un lien
   if (href) {
     return (
-      <Link href={href} style={{ display: "flex" }} className={className}>
-        <div
-          style={style}
-          onMouseEnter={variant === "button" ? handleMouseEnter : undefined}
-          onMouseLeave={variant === "button" ? handleMouseLeave : undefined}
-        >
-          <CardContent icon={icon} value={value} label={label} />
-        </div>
+      <Link href={href} className={baseClasses}>
+        <CardContent icon={icon} value={value} label={label} />
       </Link>
     );
   }
@@ -117,13 +76,7 @@ export function StatCard({
   // Si c'est un bouton cliquable
   if (onClick) {
     return (
-      <button
-        onClick={onClick}
-        style={style}
-        onMouseEnter={variant === "button" ? handleMouseEnter : undefined}
-        onMouseLeave={variant === "button" ? handleMouseLeave : undefined}
-        className={className}
-      >
+      <button onClick={onClick} className={baseClasses}>
         <CardContent icon={icon} value={value} label={label} />
       </button>
     );
@@ -131,7 +84,7 @@ export function StatCard({
 
   // Sinon c'est juste un affichage
   return (
-    <div style={style} className={className}>
+    <div className={baseClasses}>
       <CardContent icon={icon} value={value} label={label} />
     </div>
   );

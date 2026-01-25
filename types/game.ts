@@ -38,6 +38,7 @@ export interface GuessResult {
   attempts: number;
   characterId: number;
   characterName: string;
+  characterImage?: string;
   comparisons: AttributeComparison[];
   timestamp: number;
 }

@@ -1,10 +1,15 @@
 "use client";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useChainId, useSwitchChain } from "wagmi";
 import { useState, useEffect, useCallback } from "react";
+// Note: useCallback still needed for refetch
 import { parseAbi } from "viem";
-import { base } from "wagmi/chains";
+import { baseSepolia } from "wagmi/chains";
 import { GameState, GuessResult, Character, Collection } from "@/types/game";
 import { getDailyCharacter, hashCharacter, compareAttributes, getCurrentDay } from "@/utils/game";
+
+// Cache settings to reduce RPC calls and avoid rate limiting
+const CACHE_TIME = 5 * 60 * 1000; // 5 minutes staleTime
+const REFETCH_INTERVAL = 60 * 1000; // Refetch every 60 seconds max
 
 const CONTRACT_ABI = parseAbi([
   "function makeGuess(uint256 _collectionId, uint256 _characterId) external payable returns (bool isCorrect, uint256 attempts)",
@@ -43,9 +48,12 @@ export function useMakeGuess() {
     address: CONTRACT_ADDRESS,
     abi: CONTRACT_ABI,
     functionName: "feePerGuess",
-    chainId: base.id, // Forcer Base pour la lecture
+    chainId: baseSepolia.id, // Forcer Base pour la lecture
     query: {
       enabled: !!CONTRACT_ADDRESS && CONTRACT_ADDRESS !== "0x0000000000000000000000000000000000000000",
+      staleTime: CACHE_TIME,
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
     },
   });
 
@@ -56,9 +64,9 @@ export function useMakeGuess() {
       }
 
       // Vérifier et forcer Base (chainId 8453)
-      if (chainId !== base.id) {
+      if (chainId !== baseSepolia.id) {
         try {
-          await switchChain({ chainId: base.id });
+          await switchChain({ chainId: baseSepolia.id });
           // Attendre un peu pour que le switch soit effectif
           await new Promise(resolve => setTimeout(resolve, 500));
         } catch (switchError) {
@@ -75,7 +83,7 @@ export function useMakeGuess() {
         functionName: "makeGuess",
         args: [BigInt(collectionId), BigInt(characterId)],
         value: feeAmount,
-        chainId: base.id, // Forcer Base explicitement
+        chainId: baseSepolia.id, // Forcer Base explicitement
       });
     },
     [writeContract, address, fee, chainId, switchChain]
@@ -116,9 +124,12 @@ export function useGameState(collection: Collection) {
     abi: CONTRACT_ABI,
     functionName: "getDailyCharacterId",
     args: [BigInt(collection.id)],
-    chainId: base.id, // Forcer Base
+    chainId: baseSepolia.id, // Forcer Base
     query: {
       enabled: !!collection.id,
+      staleTime: CACHE_TIME,
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
     },
   });
 
@@ -128,10 +139,12 @@ export function useGameState(collection: Collection) {
     abi: CONTRACT_ABI,
     functionName: "getAttempts",
     args: address ? [address as `0x${string}`, BigInt(collection.id), BigInt(currentDay)] : undefined,
-    chainId: base.id, // Forcer Base
+    chainId: baseSepolia.id, // Forcer Base
     query: {
       enabled: !!address,
+      staleTime: 30 * 1000, // 30 seconds for attempts (more dynamic)
       refetchInterval: false,
+      refetchOnWindowFocus: false,
     },
   });
 
@@ -141,10 +154,12 @@ export function useGameState(collection: Collection) {
     abi: CONTRACT_ABI,
     functionName: "getPlayerGuesses",
     args: address ? [address as `0x${string}`, BigInt(collection.id)] : undefined,
-    chainId: base.id, // Forcer Base
+    chainId: baseSepolia.id, // Forcer Base
     query: {
       enabled: !!address,
-      refetchInterval: false, // Pas de polling automatique
+      staleTime: 30 * 1000, // 30 seconds for guesses (more dynamic)
+      refetchInterval: false,
+      refetchOnWindowFocus: false,
     },
   });
 
@@ -161,49 +176,57 @@ export function useGameState(collection: Collection) {
   }, [attempts]);
 
   // Traiter les propositions précédentes
-  // Le personnage du jour vient maintenant du contrat (calculé on-chain)
+  // Les personnages sont maintenant chargés côté serveur via ?q=all
   useEffect(() => {
-    if (playerGuesses && dailyCharacterId) {
-      const characters = collection.characters ?? [];
+    if (!playerGuesses || !dailyCharacterId) return;
 
-      // Récupérer le personnage du jour depuis la collection (basé sur l'ID du contrat)
-      const dailyChar = characters.find((c) => c.id === Number(dailyCharacterId));
+    // Récupérer le personnage du jour depuis la collection locale
+    const dailyCharId = Number(dailyCharacterId);
+    const dailyChar = collection.characters?.find((c) => c.id === dailyCharId) || null;
 
-      const todayGuesses = (playerGuesses as any[])
-        .filter((g) => {
-          const guessDay = Math.floor(Number(g.timestamp) / 86400);
-          return guessDay === currentDay;
-        })
-        .map((g) => {
-          const guessChar = characters.find((c) => c.id === Number(g.characterId));
+    console.log("Daily character:", dailyChar?.name || "NOT FOUND", "ID:", dailyCharId);
 
-          // Si on n'a pas les données du personnage, créer un résultat minimal
-          const comparisons = (guessChar && dailyChar)
-            ? compareAttributes(guessChar, dailyChar, collection.attributes)
-            : [];
+    // Filtrer les guesses d'aujourd'hui
+    const todayGuessesRaw = (playerGuesses as any[]).filter((g) => {
+      const guessDay = Math.floor(Number(g.timestamp) / 86400);
+      return guessDay === currentDay;
+    });
 
-          return {
-            isCorrect: g.isCorrect, // Vient du contrat, calculé on-chain
-            attempts: Number(g.characterId),
-            characterId: Number(g.characterId),
-            characterName: guessChar?.name ?? `Character #${g.characterId}`,
-            comparisons,
-            timestamp: Number(g.timestamp),
-          } as GuessResult;
-        });
+    // Traiter chaque guess avec les personnages locaux
+    const processedGuesses: GuessResult[] = todayGuessesRaw.map((g) => {
+      const charId = Number(g.characterId);
+      const guessChar = collection.characters?.find((c) => c.id === charId) || null;
 
-      const isWon = todayGuesses.some((g) => g.isCorrect);
+      console.log(`Character ${charId}:`, guessChar?.name || "NOT FOUND");
 
-      setGameState((prev) => ({
-        ...prev,
-        guesses: todayGuesses,
-        isGameWon: isWon,
-        isGameOver: isWon, // Game over uniquement si le joueur a gagné
-        // Stocker le personnage du jour (récupéré depuis le contrat)
-        dailyCharacter: dailyChar ?? null,
-        dailyCharacterHash: dailyChar ? hashCharacter(dailyChar) : "",
-      }));
-    }
+      // Calculer les comparaisons
+      const comparisons = (guessChar && dailyChar)
+        ? compareAttributes(guessChar, dailyChar, collection.attributes)
+        : [];
+
+      console.log(`Comparisons for ${charId}:`, comparisons.length);
+
+      return {
+        isCorrect: g.isCorrect,
+        attempts: charId,
+        characterId: charId,
+        characterName: guessChar?.name ?? `Character #${charId}`,
+        characterImage: guessChar?.imageUrl,
+        comparisons,
+        timestamp: Number(g.timestamp),
+      };
+    });
+
+    const isWon = processedGuesses.some((g) => g.isCorrect);
+
+    setGameState((prev) => ({
+      ...prev,
+      guesses: processedGuesses,
+      isGameWon: isWon,
+      isGameOver: isWon,
+      dailyCharacter: dailyChar,
+      dailyCharacterHash: dailyChar ? hashCharacter(dailyChar) : "",
+    }));
   }, [playerGuesses, dailyCharacterId, collection, currentDay]);
 
   return {
@@ -224,7 +247,7 @@ export function useVerifyGuess(collectionId: number, characterId: number) {
     abi: CONTRACT_ABI,
     functionName: "verifyGuess",
     args: [BigInt(collectionId), BigInt(characterId)],
-    chainId: base.id, // Forcer Base
+    chainId: baseSepolia.id, // Forcer Base
   });
 
   return isCorrect;
@@ -259,9 +282,12 @@ export function usePlayerStats(address?: `0x${string}`) {
     abi: CONTRACT_ABI,
     functionName: "getTotalWins",
     args: address ? [address] : undefined,
-    chainId: base.id, // Forcer Base
+    chainId: baseSepolia.id, // Forcer Base
     query: {
       enabled: !!address,
+      staleTime: CACHE_TIME,
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
     },
   });
 
@@ -278,9 +304,12 @@ export function useGlobalTotalWins() {
     address: CONTRACT_ADDRESS,
     abi: CONTRACT_ABI,
     functionName: "getGlobalTotalWins",
-    chainId: base.id, // Forcer Base
+    chainId: baseSepolia.id, // Forcer Base
     query: {
       enabled: !!CONTRACT_ADDRESS && CONTRACT_ADDRESS !== "0x0000000000000000000000000000000000000000",
+      staleTime: CACHE_TIME,
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
     },
   });
 
@@ -302,9 +331,12 @@ export function useCollectionStats(collectionId: number) {
     abi: CONTRACT_ABI,
     functionName: "getWinsPerCollection",
     args: address ? [address as `0x${string}`, BigInt(collectionId)] : undefined,
-    chainId: base.id, // Forcer Base
+    chainId: baseSepolia.id, // Forcer Base
     query: {
       enabled: !!address,
+      staleTime: CACHE_TIME,
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
     },
   });
 
@@ -314,7 +346,12 @@ export function useCollectionStats(collectionId: number) {
     abi: CONTRACT_ABI,
     functionName: "getWinnersTodayCount",
     args: [BigInt(collectionId), BigInt(currentDay)],
-    chainId: base.id, // Forcer Base
+    chainId: baseSepolia.id, // Forcer Base
+    query: {
+      staleTime: CACHE_TIME,
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
+    },
   });
 
   // Nombre total de personnes qui ont trouvé de tous temps
@@ -323,7 +360,12 @@ export function useCollectionStats(collectionId: number) {
     abi: CONTRACT_ABI,
     functionName: "getTotalWinnersCount",
     args: [BigInt(collectionId)],
-    chainId: base.id, // Forcer Base
+    chainId: baseSepolia.id, // Forcer Base
+    query: {
+      staleTime: CACHE_TIME,
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
+    },
   });
 
   return {

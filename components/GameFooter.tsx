@@ -91,47 +91,32 @@ const TotalIcon = () => (
 
 export function GameFooter({ attempts, userWins, winnersToday, totalWinners }: GameFooterProps) {
   return (
-    <div className="w-full px-2 sm:px-4 py-4 mt-auto">
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "stretch",
-          gap: "0.75rem",
-          flexWrap: "wrap",
-          maxWidth: "1200px",
-          margin: "0 auto",
-          padding: "1rem",
-          borderRadius: "1rem",
-          background: "rgba(255, 255, 255, 0.08)",
-          backdropFilter: "blur(10px)",
-          border: "1px solid rgba(255, 255, 255, 0.1)",
-        }}
-      >
+    <div className="w-full px-2 sm:px-4 py-2 sm:py-4 mt-auto">
+      <div className="flex justify-center items-stretch gap-1.5 sm:gap-2 md:gap-3 flex-nowrap max-w-[1200px] mx-auto p-2 sm:p-3 md:p-4 rounded-xl bg-white/[0.08] backdrop-blur-lg border border-white/10">
         <StatCard
           icon={<AttemptsIcon />}
           value={attempts}
-          label="Essais aujourd'hui"
+          label="Essais"
           variant="highlight"
           flex
         />
         <StatCard
           icon={<TrophyIcon />}
           value={userWins}
-          label="Vos victoires"
+          label="Victoires"
           variant="highlight"
           flex
         />
         <StatCard
           icon={<TodayIcon />}
           value={winnersToday}
-          label="Trouvé aujourd'hui"
+          label="Aujourd'hui"
           flex
         />
         <StatCard
           icon={<TotalIcon />}
           value={totalWinners}
-          label="Total trouvé"
+          label="Total"
           flex
         />
       </div>

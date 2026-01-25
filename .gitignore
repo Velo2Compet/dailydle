@@ -47,3 +47,5 @@ next-env.d.ts
 /smart-contracts/coverage
 /smart-contracts/coverage.json
 /smart-contracts/typechain-types
+
+DEPLOYMENT_GUIDE.md

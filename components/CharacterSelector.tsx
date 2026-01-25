@@ -1,14 +1,9 @@
 "use client";
-import { useState, useRef, useEffect, useCallback } from "react";
-
-interface SearchCharacter {
-  id: number;
-  name: string;
-  picture?: string;
-}
+import { useState, useRef, useEffect, useMemo } from "react";
+import { Character } from "@/types/game";
 
 interface CharacterSelectorProps {
-  categoryId: number;
+  characters: Character[];
   selectedCharacterId: number | null;
   selectedCharacterName?: string;
   selectedCharacterImage?: string;
@@ -18,7 +13,7 @@ interface CharacterSelectorProps {
 }
 
 export function CharacterSelector({
-  categoryId,
+  characters,
   selectedCharacterId,
   selectedCharacterName,
   selectedCharacterImage,
@@ -29,77 +24,40 @@ export function CharacterSelector({
   const [searchTerm, setSearchTerm] = useState("");
   const [isDropdownVisible, setIsDropdownVisible] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
-  const [searchResults, setSearchResults] = useState<SearchCharacter[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
 
   const isCharacterDisabled = (characterId: number) => {
     return disabledCharacters.includes(characterId);
   };
 
-  // Debounced search
-  const searchCharacters = useCallback(async (query: string) => {
-    if (!query || query.length < 1) {
-      setSearchResults([]);
-      return;
+  // Recherche locale dans les personnages chargés côté serveur
+  const searchResults = useMemo(() => {
+    if (!searchTerm || searchTerm.length < 1) {
+      return [];
     }
 
-    // Cancel previous request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    abortControllerRef.current = new AbortController();
-
-    setIsLoading(true);
-    try {
-      const res = await fetch(
-        `/api/categories/${categoryId}/search?q=${encodeURIComponent(query)}`,
-        { signal: abortControllerRef.current.signal }
-      );
-      if (res.ok) {
-        const data = await res.json();
-        const personnages = data.personnages || [];
-        setSearchResults(
-          personnages
-            .filter((p: SearchCharacter) => !isCharacterDisabled(p.id))
-            .slice(0, 20)
-        );
-      }
-    } catch (e) {
-      if ((e as Error).name !== "AbortError") {
-        console.error("Search error:", e);
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }, [categoryId, disabledCharacters]);
-
-  // Debounce effect
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      searchCharacters(searchTerm);
-    }, 200);
-    return () => clearTimeout(timer);
-  }, [searchTerm, searchCharacters]);
+    const query = searchTerm.toLowerCase();
+    return characters
+      .filter((c) => c.name.toLowerCase().includes(query))
+      .filter((c) => !isCharacterDisabled(c.id))
+      .slice(0, 20);
+  }, [searchTerm, characters, disabledCharacters]);
 
   useEffect(() => {
     if (searchTerm) {
       setIsDropdownVisible(true);
     } else {
       setIsDropdownVisible(false);
-      setSearchResults([]);
     }
     setHighlightedIndex(0);
   }, [searchTerm]);
 
-  const handleSelect = (character: SearchCharacter) => {
+  const handleSelect = (character: Character) => {
     if (isCharacterDisabled(character.id) || disabled) return;
-    onSelect(character.id, character.name, character.picture);
+    onSelect(character.id, character.name, character.imageUrl);
     setSearchTerm("");
     setIsDropdownVisible(false);
-    setSearchResults([]);
     inputRef.current?.focus();
   };
 
@@ -152,39 +110,35 @@ export function CharacterSelector({
           />
         </div>
       </div>
-      {isDropdownVisible && (searchResults.length > 0 || isLoading) && (
+      {isDropdownVisible && searchResults.length > 0 && (
         <div className="absolute bg-gradient-to-br from-[#1a1a2e] to-[#121217] border border-violet-500/30 rounded-xl shadow-2xl z-[9999] w-full mt-2">
           <div className="options max-h-80 overflow-y-auto scrollbar flex flex-col">
-            {isLoading && searchResults.length === 0 ? (
-              <div className="p-4 text-white/50 text-center">Recherche...</div>
-            ) : (
-              searchResults.map((character, index) => {
-                const isDisabled = isCharacterDisabled(character.id);
-                return (
-                  <div key={character.id} onClick={() => !isDisabled && handleSelect(character)}>
-                    <label
-                      className={`flex items-center p-4 cursor-pointer text-white transition-colors ${
-                        index === highlightedIndex ? "bg-white/10" : "hover:bg-white/10"
-                      } ${isDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
-                    >
-                      <div className="size-10 bg-white/10 rounded overflow-hidden">
-                        {character.picture && (
-                          <img
-                            src={character.picture}
-                            alt={character.name}
-                            className="object-cover w-full h-full"
-                          />
-                        )}
-                      </div>
-                      <span className="ml-1.5 text-gray-200">
-                        {character.name}
-                        {isDisabled && " (déjà deviné)"}
-                      </span>
-                    </label>
-                  </div>
-                );
-              })
-            )}
+            {searchResults.map((character, index) => {
+              const isDisabled = isCharacterDisabled(character.id);
+              return (
+                <div key={character.id} onClick={() => !isDisabled && handleSelect(character)}>
+                  <label
+                    className={`flex items-center p-4 cursor-pointer text-white transition-colors ${
+                      index === highlightedIndex ? "bg-white/10" : "hover:bg-white/10"
+                    } ${isDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                  >
+                    <div className="size-10 bg-white/10 rounded overflow-hidden">
+                      {character.imageUrl && (
+                        <img
+                          src={character.imageUrl}
+                          alt={character.name}
+                          className="object-cover w-full h-full"
+                        />
+                      )}
+                    </div>
+                    <span className="ml-1.5 text-gray-200">
+                      {character.name}
+                      {isDisabled && " (déjà deviné)"}
+                    </span>
+                  </label>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

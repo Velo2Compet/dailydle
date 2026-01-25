@@ -16,7 +16,7 @@ function headers(): HeadersInit {
     Accept: "application/json",
   };
   if (API_KEY) {
-    h["X-API-Key"] = API_KEY;
+    h["x-api-key"] = API_KEY;
   }
   return h;
 }
@@ -37,9 +37,15 @@ export interface QuizzdleParentCategory {
 }
 
 export interface QuizzdleAttribute {
+  id?: number;
   name: string;
   nameFront?: string;
   type: string;
+}
+
+export interface QuizzdleCharacterAttribut {
+  attribut_id: number;
+  value: string | number;
 }
 
 export interface QuizzdleCharacter {
@@ -47,6 +53,7 @@ export interface QuizzdleCharacter {
   name: string;
   imageUrl?: string;
   picture?: string;
+  attributs?: QuizzdleCharacterAttribut[];
   [key: string]: unknown;
 }
 
@@ -122,7 +129,8 @@ export async function fetchCategoriesParent(): Promise<QuizzdleParentCategory[]>
 export async function fetchCategoryById(
   id: number | string
 ): Promise<QuizzdleCategoryFull> {
-  const res = await fetch(`${BASE}/categories/${id}`, {
+  // ?q=all récupère tous les personnages de la catégorie côté serveur
+  const res = await fetch(`${BASE}/categories/${id}?q=all`, {
     headers: headers(),
     cache: "no-store",
   });
