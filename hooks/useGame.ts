@@ -164,12 +164,10 @@ export function useGameState(collection: Collection) {
   // Le personnage du jour vient maintenant du contrat (calculé on-chain)
   useEffect(() => {
     if (playerGuesses && dailyCharacterId) {
+      const characters = collection.characters ?? [];
+
       // Récupérer le personnage du jour depuis la collection (basé sur l'ID du contrat)
-      const dailyChar = collection.characters.find((c) => c.id === Number(dailyCharacterId));
-      
-      if (!dailyChar) {
-        return;
-      }
+      const dailyChar = characters.find((c) => c.id === Number(dailyCharacterId));
 
       const todayGuesses = (playerGuesses as any[])
         .filter((g) => {
@@ -177,26 +175,22 @@ export function useGameState(collection: Collection) {
           return guessDay === currentDay;
         })
         .map((g) => {
-          const guessChar = collection.characters.find((c) => c.id === Number(g.characterId));
-          if (!guessChar) return null;
+          const guessChar = characters.find((c) => c.id === Number(g.characterId));
 
-          // Calculer les comparaisons pour l'affichage (après avoir obtenu le résultat on-chain)
-          const comparisons = compareAttributes(
-            guessChar,
-            dailyChar,
-            collection.attributes
-          );
+          // Si on n'a pas les données du personnage, créer un résultat minimal
+          const comparisons = (guessChar && dailyChar)
+            ? compareAttributes(guessChar, dailyChar, collection.attributes)
+            : [];
 
           return {
             isCorrect: g.isCorrect, // Vient du contrat, calculé on-chain
-            attempts: Number(g.characterId), // Temporaire, sera remplacé par le vrai compteur
+            attempts: Number(g.characterId),
             characterId: Number(g.characterId),
-            characterName: guessChar.name,
+            characterName: guessChar?.name ?? `Character #${g.characterId}`,
             comparisons,
             timestamp: Number(g.timestamp),
           } as GuessResult;
-        })
-        .filter((g): g is GuessResult => g !== null);
+        });
 
       const isWon = todayGuesses.some((g) => g.isCorrect);
 
@@ -206,8 +200,8 @@ export function useGameState(collection: Collection) {
         isGameWon: isWon,
         isGameOver: isWon, // Game over uniquement si le joueur a gagné
         // Stocker le personnage du jour (récupéré depuis le contrat)
-        dailyCharacter: dailyChar,
-        dailyCharacterHash: hashCharacter(dailyChar),
+        dailyCharacter: dailyChar ?? null,
+        dailyCharacterHash: dailyChar ? hashCharacter(dailyChar) : "",
       }));
     }
   }, [playerGuesses, dailyCharacterId, collection, currentDay]);
@@ -243,11 +237,12 @@ export function useDailyCharacter(collection: Collection) {
   const [dailyCharacter, setDailyCharacter] = useState<Character | null>(null);
 
   useEffect(() => {
-    if (!collection || !collection.characters || collection.characters.length === 0) {
+    const characters = collection?.characters ?? [];
+    if (characters.length === 0) {
       setDailyCharacter(null);
       return;
     }
-    
+
     const char = getDailyCharacter(collection);
     setDailyCharacter(char);
   }, [collection]);

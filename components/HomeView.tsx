@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useMiniKit } from "@coinbase/onchainkit/minikit";
 import Link from "next/link";
-import { GameHeader } from "@/components/GameHeader";
+import { StatsHeader } from "@/components/StatsHeader";
 import type { QuizzdleCategoryRef } from "@/lib/quizzdle-api";
 import { quizzdleImageUrl } from "@/lib/quizzdle-api";
 import styles from "@/app/page.module.css";
@@ -21,49 +21,8 @@ export function HomeView({ categories }: HomeViewProps) {
 
   return (
     <div className={styles.container}>
-      <GameHeader className={styles.homeHeader} />
+      <StatsHeader />
       <main className={styles.mainContainer}>
-        <section className={styles.seoSection}>
-          <div id="homepage-seo-card" className={styles.seoCard}>
-            <div className={styles.seoCardOverlay} />
-            <div className={styles.seoCardContent}>
-              <h1 className={styles.seoTitle}>
-                <img src="/logo.png" alt="Dailydle" className={styles.logo} />
-                <span className={styles.seoTitleGradient}>
-                  Guess the character of the day
-                </span>
-              </h1>
-              <div className={styles.seoText}>
-                <p>
-                  Dailydle is a daily guessing game: find the mystery character
-                  from your clues and comparisons.
-                </p>
-                <p>
-                  Pick a collection, make guesses, and use the hints to narrow it
-                  down.
-                </p>
-                <p>Observe, deduce, and win.</p>
-              </div>
-              <a href="#categories" className={styles.ctaLink}>
-                <span>Choisir une catégorie</span>
-                <svg
-                  className={styles.ctaArrow}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M13 7l5 5m0 0l-5 5m5-5H6"
-                  />
-                </svg>
-              </a>
-            </div>
-          </div>
-        </section>
-
         <div id="categories" className={styles.categoriesWrapper}>
           <h2 className={styles.sectionTitle}>Catégories</h2>
           {categories.length === 0 ? (

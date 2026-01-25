@@ -7,7 +7,8 @@
 const QUIZZDLE_API_URL =
   process.env.QUIZZDLE_API_URL || "https://quizzdle.fr";
 const BASE = `${QUIZZDLE_API_URL}/api/public`;
-const API_KEY = process.env.QUIZZDLE_API_KEY ?? "";
+// Nettoyer la clé API de tout caractère invisible/non-ASCII
+const API_KEY = (process.env.QUIZZDLE_API_KEY ?? "").trim().replace(/[^\x20-\x7E]/g, "");
 
 function headers(): HeadersInit {
   const h: Record<string, string> = {
@@ -15,7 +16,7 @@ function headers(): HeadersInit {
     Accept: "application/json",
   };
   if (API_KEY) {
-    h["X-Api-Key"] = API_KEY;
+    h["X-API-Key"] = API_KEY;
   }
   return h;
 }
@@ -58,6 +59,7 @@ export interface QuizzdleCategoryFull {
   bgImage?: string;
   background_image?: string;
   attributes?: QuizzdleAttribute[];
+  attributs?: QuizzdleAttribute[];
   characters?: QuizzdleCharacter[];
   personnages?: QuizzdleCharacter[];
 }

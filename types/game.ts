@@ -21,7 +21,7 @@ export interface Collection {
   color?: string;
   bgImage?: string;
   attributes: Attribute[];
-  characters: Character[];
+  characters?: Character[];
 }
 
 export interface AttributeComparison {

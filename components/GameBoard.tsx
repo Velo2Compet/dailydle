@@ -4,10 +4,10 @@ import { useAccount } from "wagmi";
 import { useMiniKit } from "@coinbase/onchainkit/minikit";
 import { Collection } from "@/types/game";
 import { CharacterSelector } from "./CharacterSelector";
-import { GameHeader } from "./GameHeader";
+import { StatsHeader } from "./StatsHeader";
+import { GameFooter } from "./GameFooter";
 import { WalletButton } from "./WalletButton";
 import { Button } from "./Button";
-import { StatItem } from "./StatItem";
 import { useMakeGuess, useGameState, useCollectionStats } from "@/hooks/useGame";
 import { useReadContract } from "wagmi";
 import { formatAttributeValue } from "@/utils/game";
@@ -22,6 +22,8 @@ export function GameBoard({ collection }: GameBoardProps) {
   const { context, isFrameReady } = useMiniKit();
   const isFarcasterConnected = !!context?.user?.fid;
   const [selectedCharacterId, setSelectedCharacterId] = useState<number | null>(null);
+  const [selectedCharacterName, setSelectedCharacterName] = useState<string | undefined>(undefined);
+  const [selectedCharacterImage, setSelectedCharacterImage] = useState<string | undefined>(undefined);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   // État pour suivre quelles colonnes ont été révélées pour chaque guess (clé = index dans le tableau)
   const [revealedColumns, setRevealedColumns] = useState<Map<number, Set<number>>>(new Map());
@@ -70,6 +72,13 @@ export function GameBoard({ collection }: GameBoardProps) {
     return gameState.guesses.some(g => g.characterId === characterId);
   };
 
+  // Handler pour la sélection d'un personnage
+  const handleCharacterSelect = (characterId: number, characterName: string, characterImage?: string) => {
+    setSelectedCharacterId(characterId);
+    setSelectedCharacterName(characterName);
+    setSelectedCharacterImage(characterImage);
+  };
+
   const handleGuess = async () => {
     if (!selectedCharacterId || !canPlay) return;
     
@@ -94,6 +103,8 @@ export function GameBoard({ collection }: GameBoardProps) {
       
       // Réinitialiser la sélection immédiatement pour éviter les doubles clics
       setSelectedCharacterId(null);
+      setSelectedCharacterName(undefined);
+      setSelectedCharacterImage(undefined);
       
       // Ne pas afficher le résultat maintenant - attendre la confirmation
       // Le résultat sera mis à jour automatiquement via useGameState après confirmation
@@ -306,8 +317,8 @@ export function GameBoard({ collection }: GameBoardProps) {
 
   return (
     <div className="flex flex-col min-h-screen">
-      <GameHeader />
-      <div className="flex justify-center px-2 sm:px-4 container mx-auto w-full max-w-7xl flex-1 py-4 sm:py-12">
+      <StatsHeader />
+      <div className="flex justify-center px-2 sm:px-4 container mx-auto w-full max-w-[1200px] flex-1 py-4 sm:py-12">
         <div className="w-full space-y-3 sm:space-y-6">
           {/* Header */}
           <div className="text-center flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 mb-4 sm:mb-12">
@@ -317,22 +328,6 @@ export function GameBoard({ collection }: GameBoardProps) {
               </span>
             </h1>
           </div>
-
-        {/* Stats */}
-        <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
-          <div className="flex items-center gap-2 bg-gradient-to-r from-violet-600/20 to-blue-600/20 border border-violet-500/30 rounded-xl px-4 py-2">
-            <StatItem label="Daily attempts" value={gameState.attempts} />
-          </div>
-          <div className="flex items-center gap-2 bg-gradient-to-r from-violet-600/20 to-blue-600/20 border border-violet-500/30 rounded-xl px-4 py-2">
-            <StatItem label="Your wins" value={collectionStats.userWins} />
-          </div>
-          <div className="flex items-center gap-2 bg-gradient-to-r from-violet-600/20 to-blue-600/20 border border-violet-500/30 rounded-xl px-4 py-2">
-            <StatItem label="Found today" value={collectionStats.winnersToday} />
-          </div>
-          <div className="flex items-center gap-2 bg-gradient-to-r from-violet-600/20 to-blue-600/20 border border-violet-500/30 rounded-xl px-4 py-2">
-            <StatItem label="Total found" value={collectionStats.totalWinners} />
-          </div>
-        </div>
 
         {/* Message de victoire */}
         {gameState.isGameWon && (
@@ -367,9 +362,11 @@ export function GameBoard({ collection }: GameBoardProps) {
               <div className="flex flex-col sm:flex-row items-start justify-center gap-3 sm:gap-3">
                 <div className="flex-1 w-full sm:max-w-none">
                   <CharacterSelector
-                    characters={collection.characters}
+                    categoryId={collection.id}
                     selectedCharacterId={selectedCharacterId}
-                    onSelect={setSelectedCharacterId}
+                    selectedCharacterName={selectedCharacterName}
+                    selectedCharacterImage={selectedCharacterImage}
+                    onSelect={handleCharacterSelect}
                     disabled={isPending || isConfirming || gameState.isGameOver || !isConnected}
                     disabledCharacters={gameState.guesses.map(g => g.characterId)}
                   />
@@ -435,7 +432,6 @@ export function GameBoard({ collection }: GameBoardProps) {
                 {/* Lignes de résultats */}
                 <div className="flex sm:flex-col-reverse gap-2 sm:gap-4 sm:mt-2 mt-0 flex-row-reverse overflow-auto">
                   {gameState.guesses.map((guess, index) => {
-                    const guessCharacter = collection.characters.find(c => c.id === guess.characterId);
                     const revealed = revealedColumns.get(index);
                     // Vérifier si cette proposition est complètement révélée (pas d'animation en cours)
                     const isFullyRevealed = fullyRevealedGuesses.has(index);
@@ -451,20 +447,11 @@ export function GameBoard({ collection }: GameBoardProps) {
                         {/* Colonne personnage */}
                         <div className="min-w-24 min-h-16 flex-1">
                           <div className={`min-h-16 bg-white/10 border border-white/10 rounded flex items-center justify-center text-center min-w-24 flex-1 transition-opacity duration-300 ${isPersonnageRevealed ? 'opacity-100' : 'opacity-0'}`}>
-                            {guessCharacter?.imageUrl ? (
-                              <div className="w-full h-full relative flex items-center justify-center gap-4 p-2">
-                                <img 
-                                  src={guessCharacter.imageUrl} 
-                                  alt={guessCharacter.name} 
-                                  className="object-cover size-12 rounded"
-                                />
-                                <div className="hidden sm:block text-white text-sm font-medium">
-                                  {guessCharacter.name}
-                                </div>
+                            <div className="w-full h-full relative flex items-center justify-center gap-4 p-2">
+                              <div className="hidden sm:block text-white text-sm font-medium">
+                                {guess.characterName}
                               </div>
-                            ) : (
-                              <span className="text-white text-sm">{guess.characterName}</span>
-                            )}
+                            </div>
                           </div>
                         </div>
 
@@ -516,6 +503,12 @@ export function GameBoard({ collection }: GameBoardProps) {
         </div>
         </div>
       </div>
+      <GameFooter
+        attempts={gameState.attempts}
+        userWins={collectionStats.userWins}
+        winnersToday={collectionStats.winnersToday}
+        totalWinners={collectionStats.totalWinners}
+      />
     </div>
   );
 }

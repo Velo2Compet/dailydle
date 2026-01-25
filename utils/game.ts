@@ -38,7 +38,8 @@ export function getDailyCharacter(
   collection: Collection,
   date?: Date
 ): Character | null {
-  if (!collection || !collection.characters || collection.characters.length === 0) {
+  const characters = collection?.characters ?? [];
+  if (characters.length === 0) {
     return null;
   }
 
@@ -47,13 +48,13 @@ export function getDailyCharacter(
     (targetDate.getTime() - new Date(targetDate.getFullYear(), 0, 0).getTime()) /
       86400000
   );
-  
+
   // Seed déterministe : année + jour de l'année + ID de la collection
   const seed = targetDate.getFullYear() * 1000 + dayOfYear + collection.id * 10000;
-  
+
   // Sélectionner un personnage de manière déterministe
-  const characterIndex = seed % collection.characters.length;
-  const rawCharacter = collection.characters[characterIndex];
+  const characterIndex = seed % characters.length;
+  const rawCharacter = characters[characterIndex];
   return normalizeCharacter(rawCharacter);
 }
 

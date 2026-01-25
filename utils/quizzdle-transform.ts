@@ -13,7 +13,7 @@ import { quizzdleImageUrl } from "@/lib/quizzdle-api";
 export function quizzdleCategoryToCollection(
   raw: QuizzdleCategoryFull
 ): Collection {
-  const attrs = raw.attributes ?? [];
+  const attrs = raw.attributes ?? raw.attributs ?? [];
   const chars = raw.characters ?? raw.personnages ?? [];
 
   const attributes = attrs.map((a: QuizzdleAttribute) => ({

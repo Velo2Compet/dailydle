@@ -62,11 +62,7 @@ export default async function GameCategoryPage({ params }: PageProps) {
     notFound();
   }
 
-  if (
-    !collection ||
-    !collection.characters ||
-    collection.characters.length === 0
-  ) {
+  if (!collection) {
     notFound();
   }
 
