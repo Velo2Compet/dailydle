@@ -23,7 +23,7 @@ import type {
   TypedContractMethod,
 } from "./common";
 
-export declare namespace Dailydle {
+export declare namespace Quizzdle {
   export type GuessStruct = {
     player: AddressLike;
     collectionId: BigNumberish;
@@ -47,7 +47,7 @@ export declare namespace Dailydle {
   };
 }
 
-export interface DailydleInterface extends Interface {
+export interface QuizzdleInterface extends Interface {
   getFunction(
     nameOrSignature:
       | "attemptsPerDay"
@@ -57,12 +57,15 @@ export interface DailydleInterface extends Interface {
       | "getAttempts"
       | "getCollectionCharacterIds"
       | "getDailyCharacterId"
+      | "getGlobalTotalPaid"
       | "getGlobalTotalWins"
       | "getPlayerGuesses"
+      | "getTotalPaid"
       | "getTotalWinnersCount"
       | "getTotalWins"
       | "getWinnersTodayCount"
       | "getWinsPerCollection"
+      | "globalTotalPaid"
       | "globalTotalWins"
       | "hasWonEver"
       | "hasWonToday"
@@ -70,6 +73,7 @@ export interface DailydleInterface extends Interface {
       | "owner"
       | "playerGuesses"
       | "setFee"
+      | "totalPaid"
       | "totalWinnersCount"
       | "totalWins"
       | "updateCollectionCharacterIds"
@@ -118,12 +122,20 @@ export interface DailydleInterface extends Interface {
     values: [BigNumberish]
   ): string;
   encodeFunctionData(
+    functionFragment: "getGlobalTotalPaid",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
     functionFragment: "getGlobalTotalWins",
     values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "getPlayerGuesses",
     values: [AddressLike, BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getTotalPaid",
+    values: [AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "getTotalWinnersCount",
@@ -140,6 +152,10 @@ export interface DailydleInterface extends Interface {
   encodeFunctionData(
     functionFragment: "getWinsPerCollection",
     values: [AddressLike, BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "globalTotalPaid",
+    values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "globalTotalWins",
@@ -165,6 +181,10 @@ export interface DailydleInterface extends Interface {
   encodeFunctionData(
     functionFragment: "setFee",
     values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "totalPaid",
+    values: [AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "totalWinnersCount",
@@ -228,11 +248,19 @@ export interface DailydleInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "getGlobalTotalPaid",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "getGlobalTotalWins",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
     functionFragment: "getPlayerGuesses",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "getTotalPaid",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -252,6 +280,10 @@ export interface DailydleInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "globalTotalPaid",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "globalTotalWins",
     data: BytesLike
   ): Result;
@@ -267,6 +299,7 @@ export interface DailydleInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "setFee", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "totalPaid", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "totalWinnersCount",
     data: BytesLike
@@ -376,11 +409,11 @@ export namespace GuessMadeEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
-export interface Dailydle extends BaseContract {
-  connect(runner?: ContractRunner | null): Dailydle;
+export interface Quizzdle extends BaseContract {
+  connect(runner?: ContractRunner | null): Quizzdle;
   waitForDeployment(): Promise<this>;
 
-  interface: DailydleInterface;
+  interface: QuizzdleInterface;
 
   queryFilter<TCEvent extends TypedContractEvent>(
     event: TCEvent,
@@ -457,13 +490,17 @@ export interface Dailydle extends BaseContract {
     "view"
   >;
 
+  getGlobalTotalPaid: TypedContractMethod<[], [bigint], "view">;
+
   getGlobalTotalWins: TypedContractMethod<[], [bigint], "view">;
 
   getPlayerGuesses: TypedContractMethod<
     [_player: AddressLike, _collectionId: BigNumberish],
-    [Dailydle.GuessStructOutput[]],
+    [Quizzdle.GuessStructOutput[]],
     "view"
   >;
+
+  getTotalPaid: TypedContractMethod<[_player: AddressLike], [bigint], "view">;
 
   getTotalWinnersCount: TypedContractMethod<
     [_collectionId: BigNumberish],
@@ -484,6 +521,8 @@ export interface Dailydle extends BaseContract {
     [bigint],
     "view"
   >;
+
+  globalTotalPaid: TypedContractMethod<[], [bigint], "view">;
 
   globalTotalWins: TypedContractMethod<[], [bigint], "view">;
 
@@ -522,6 +561,8 @@ export interface Dailydle extends BaseContract {
   >;
 
   setFee: TypedContractMethod<[_newFee: BigNumberish], [void], "nonpayable">;
+
+  totalPaid: TypedContractMethod<[arg0: AddressLike], [bigint], "view">;
 
   totalWinnersCount: TypedContractMethod<
     [arg0: BigNumberish],
@@ -601,15 +642,21 @@ export interface Dailydle extends BaseContract {
     nameOrSignature: "getDailyCharacterId"
   ): TypedContractMethod<[_collectionId: BigNumberish], [bigint], "view">;
   getFunction(
+    nameOrSignature: "getGlobalTotalPaid"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
     nameOrSignature: "getGlobalTotalWins"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "getPlayerGuesses"
   ): TypedContractMethod<
     [_player: AddressLike, _collectionId: BigNumberish],
-    [Dailydle.GuessStructOutput[]],
+    [Quizzdle.GuessStructOutput[]],
     "view"
   >;
+  getFunction(
+    nameOrSignature: "getTotalPaid"
+  ): TypedContractMethod<[_player: AddressLike], [bigint], "view">;
   getFunction(
     nameOrSignature: "getTotalWinnersCount"
   ): TypedContractMethod<[_collectionId: BigNumberish], [bigint], "view">;
@@ -630,6 +677,9 @@ export interface Dailydle extends BaseContract {
     [bigint],
     "view"
   >;
+  getFunction(
+    nameOrSignature: "globalTotalPaid"
+  ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "globalTotalWins"
   ): TypedContractMethod<[], [bigint], "view">;
@@ -675,6 +725,9 @@ export interface Dailydle extends BaseContract {
   getFunction(
     nameOrSignature: "setFee"
   ): TypedContractMethod<[_newFee: BigNumberish], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "totalPaid"
+  ): TypedContractMethod<[arg0: AddressLike], [bigint], "view">;
   getFunction(
     nameOrSignature: "totalWinnersCount"
   ): TypedContractMethod<[arg0: BigNumberish], [bigint], "view">;

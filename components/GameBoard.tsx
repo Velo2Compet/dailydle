@@ -11,7 +11,7 @@ import { Button } from "./Button";
 import { useMakeGuess, useGameState, useCollectionStats } from "@/hooks/useGame";
 import { useReadContract } from "wagmi";
 import { formatAttributeValue } from "@/utils/game";
-import { ArrowDown, ArrowUp } from "lucide-react";
+import { ArrowDown, ArrowUp, Send, Loader2 } from "lucide-react";
 
 // Composant Tooltip personnalisé pour mobile et desktop
 function MobileTooltip({
@@ -21,50 +21,83 @@ function MobileTooltip({
   content: string;
   children: React.ReactNode;
 }) {
-  const [position, setPosition] = useState({ top: 0, left: 0 });
+  const [isHovered, setIsHovered] = useState(false);
+  const [position, setPosition] = useState({ top: 0, left: 0, arrowLeft: '50%' });
   const containerRef = useRef<HTMLDivElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
 
-  // DEBUG: Toujours afficher et mettre à jour la position
   useEffect(() => {
+    if (!isHovered) return;
+
     const updatePosition = () => {
-      if (containerRef.current) {
+      if (containerRef.current && tooltipRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        const tooltipRect = tooltipRef.current.getBoundingClientRect();
+        const padding = 8;
+        const screenWidth = window.innerWidth;
+        const elementCenter = rect.left + rect.width / 2;
+        const tooltipWidth = tooltipRect.width || 100;
+
+        let tooltipLeft = elementCenter - tooltipWidth / 2;
+
+        if (tooltipLeft < padding) {
+          tooltipLeft = padding;
+        } else if (tooltipLeft + tooltipWidth > screenWidth - padding) {
+          tooltipLeft = screenWidth - padding - tooltipWidth;
+        }
+
+        const arrowPos = elementCenter - tooltipLeft;
+        const arrowPercent = Math.max(15, Math.min(85, (arrowPos / tooltipWidth) * 100));
+
+        setPosition({
+          top: rect.top - 8,
+          left: tooltipLeft,
+          arrowLeft: `${arrowPercent}%`
+        });
+      } else if (containerRef.current) {
         const rect = containerRef.current.getBoundingClientRect();
         setPosition({
           top: rect.top - 8,
-          left: rect.left + rect.width / 2
+          left: rect.left + rect.width / 2 - 50,
+          arrowLeft: '50%'
         });
       }
     };
     updatePosition();
+    requestAnimationFrame(updatePosition);
     window.addEventListener('scroll', updatePosition);
     window.addEventListener('resize', updatePosition);
     return () => {
       window.removeEventListener('scroll', updatePosition);
       window.removeEventListener('resize', updatePosition);
     };
-  }, []);
+  }, [content, isHovered]);
 
   return (
     <>
       <div
         ref={containerRef}
         className="w-full h-full cursor-pointer"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        onTouchStart={() => setIsHovered(true)}
+        onTouchEnd={() => setTimeout(() => setIsHovered(false), 1500)}
       >
         {children}
       </div>
-      {/* DEBUG: Toujours visible */}
-      {position.top > 0 && (
+      {isHovered && (
         <div
+          ref={tooltipRef}
           className="fixed z-[99999] pointer-events-none"
           style={{
             top: position.top,
             left: position.left,
-            transform: 'translate(-50%, -100%)'
+            transform: 'translateY(-100%)'
           }}
         >
           <div className="relative pb-2">
             <div
-              className="text-white text-sm px-4 py-2.5 rounded-lg min-w-[80px] max-w-[280px] text-center whitespace-normal"
+              className="text-white text-sm px-3 py-2 rounded-lg min-w-[60px] max-w-[160px] text-center whitespace-normal break-words"
               style={{
                 backgroundColor: '#1a1a2e',
                 border: '2px solid #8b5cf6',
@@ -74,8 +107,10 @@ function MobileTooltip({
               {content}
             </div>
             <div
-              className="absolute left-1/2 -translate-x-1/2"
+              className="absolute"
               style={{
+                left: position.arrowLeft,
+                transform: 'translateX(-50%)',
                 bottom: '0',
                 width: 0,
                 height: 0,
@@ -85,8 +120,10 @@ function MobileTooltip({
               }}
             />
             <div
-              className="absolute left-1/2 -translate-x-1/2"
+              className="absolute"
               style={{
+                left: position.arrowLeft,
+                transform: 'translateX(-50%)',
                 bottom: '2px',
                 width: 0,
                 height: 0,
@@ -426,7 +463,7 @@ export function GameBoard({ collection }: GameBoardProps) {
             <span className="text-xs text-muted-foreground">
               a{" "}
               <a
-                href={`https://quizzdle.fr/en/${collection.slug || ""}`}
+                href={`${process.env.NEXT_PUBLIC_QUIZZDLE_API_URL || "https://quizzdle.fr"}/en/${collection.slug || ""}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-violet-400 underline hover:no-underline transition-all"
@@ -464,8 +501,8 @@ export function GameBoard({ collection }: GameBoardProps) {
               ) : (
                 <p className="text-center text-white mb-4">Search and choose a character to get started...</p>
               )}
-              <div className="flex flex-col sm:flex-row items-start justify-center gap-3 sm:gap-3">
-                <div className="flex-1 w-full sm:max-w-none">
+              <div className="flex flex-row items-center gap-3">
+                <div className="flex-1">
                   <CharacterSelector
                     characters={collection.characters || []}
                     selectedCharacterId={selectedCharacterId}
@@ -476,32 +513,47 @@ export function GameBoard({ collection }: GameBoardProps) {
                     disabledCharacters={gameState.guesses.map(g => g.characterId)}
                   />
                 </div>
-                
-                {/* Conteneur pour le bouton aligné avec l'input (h-12) */}
-                <div className="w-full sm:w-auto sm:h-12 sm:flex sm:items-center">
+
+                {/* Submit button */}
+                <div className="h-12 flex items-center">
                   {!isConnected ? (
-                    <WalletButton fullWidth={false} className="h-12 px-6 w-full sm:w-auto" />
+                    <WalletButton fullWidth={false} className="h-12 px-6" />
                   ) : (
                     <Button
                       onClick={handleGuess}
                       disabled={
-                        !selectedCharacterId || 
-                        isPending || 
-                        isConfirming || 
+                        !selectedCharacterId ||
+                        isPending ||
+                        isConfirming ||
                         gameState.isGameOver ||
                         alreadyGuessed(selectedCharacterId)
                       }
-                      className="h-12 px-6 whitespace-nowrap w-full sm:w-auto"
+                      className="!h-12 !w-12 !p-0 !px-0 !py-0 flex items-center justify-center"
+                      aria-label="Submit guess"
                     >
-                      {isPending || isConfirming
-                        ? "Envoi..."
-                        : alreadyGuessed(selectedCharacterId || 0)
-                        ? "Déjà deviné"
-                        : "Deviner"}
+                      {isPending || isConfirming ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <Send className="w-5 h-5" />
+                      )}
                     </Button>
                   )}
                 </div>
               </div>
+
+              {/* Selected character display - full width */}
+              {selectedCharacterId && selectedCharacterName && (
+                <div className="mt-3 flex items-center gap-4 p-4 bg-black/20 rounded-lg border border-white/10 w-full">
+                  {selectedCharacterImage && (
+                    <img
+                      src={selectedCharacterImage}
+                      alt={selectedCharacterName}
+                      className="size-16 rounded object-cover border-2 border-violet-500/30"
+                    />
+                  )}
+                  <span className="text-white font-semibold text-lg">{selectedCharacterName}</span>
+                </div>
+              )}
 
               {errorMessage && (
                 <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-red/20 border border-red/30 rounded-lg text-red text-sm text-center">
@@ -529,7 +581,7 @@ export function GameBoard({ collection }: GameBoardProps) {
                   style={{ gridTemplateColumns: `repeat(${collection.attributes.length + 1}, minmax(0, 1fr))` }}
                 >
                   <div className="text-center font-semibold text-[10px] sm:text-xs text-white truncate px-1">
-                    Personnage
+                    Character
                   </div>
                   {collection.attributes.map((attr) => (
                     <div key={attr.name} className="text-center font-semibold text-[10px] sm:text-xs text-white truncate px-1">

@@ -101,7 +101,7 @@ export function CharacterSelector({
           <input
             ref={inputRef}
             type="text"
-            placeholder="Tape un nom d'un personnage"
+            placeholder="Type a character name"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -134,25 +134,13 @@ export function CharacterSelector({
                     </div>
                     <span className="ml-1.5 text-gray-200">
                       {character.name}
-                      {isDisabled && " (déjà deviné)"}
+                      {isDisabled && " (already guessed)"}
                     </span>
                   </label>
                 </div>
               );
             })}
           </div>
-        </div>
-      )}
-      {selectedCharacterId && selectedCharacterName && (
-        <div className="mt-4 flex items-center gap-4 p-4 bg-black/20 rounded-lg border border-white/10">
-          {selectedCharacterImage && (
-            <img
-              src={selectedCharacterImage}
-              alt={selectedCharacterName}
-              className="size-16 rounded object-cover border-2 border-violet-500/30"
-            />
-          )}
-          <span className="text-white font-semibold text-lg">{selectedCharacterName}</span>
         </div>
       )}
     </div>

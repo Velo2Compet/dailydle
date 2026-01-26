@@ -6,13 +6,13 @@ async function main() {
   console.log("Deploying contracts with the account:", deployer.address);
   console.log("Account balance:", (await ethers.provider.getBalance(deployer.address)).toString());
 
-  const Dailydle = await ethers.getContractFactory("Dailydle");
-  const dailydle = await Dailydle.deploy();
+  const Quizzdle = await ethers.getContractFactory("Quizzdle");
+  const quizzdle = await Quizzdle.deploy();
 
-  await dailydle.waitForDeployment();
+  await quizzdle.waitForDeployment();
 
-  const address = await dailydle.getAddress();
-  console.log("Dailydle deployed to:", address);
+  const address = await quizzdle.getAddress();
+  console.log("Quizzdle deployed to:", address);
 
   // Sauvegarder l'adresse pour le frontend
   console.log("\nAdd this to your .env.local file:");

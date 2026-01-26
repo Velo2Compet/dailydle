@@ -11,7 +11,7 @@ require("dotenv").config({ path: ".env.local" });
  * - QUIZZDLE_API_URL: URL de base de l'API (par défaut: https://quizzdle.fr)
  */
 
-const QUIZZDLE_API_URL = process.env.QUIZZDLE_API_URL || "https://quizzdle.fr";
+const NEXT_PUBLIC_QUIZZDLE_API_URL = process.env.NEXT_PUBLIC_QUIZZDLE_API_URL || "https://quizzdle.fr";
 const QUIZZDLE_API_KEY = process.env.QUIZZDLE_API_KEY;
 
 /**
@@ -20,7 +20,7 @@ const QUIZZDLE_API_KEY = process.env.QUIZZDLE_API_KEY;
  * Chaque catégorie contient ids_personnages_list avec les IDs des personnages
  */
 async function fetchCategories() {
-  const response = await fetch(`${QUIZZDLE_API_URL}/api/public/categories`, {
+  const response = await fetch(`${NEXT_PUBLIC_QUIZZDLE_API_URL}/api/public/categories`, {
     headers: {
       "x-api-key": QUIZZDLE_API_KEY,
       "Content-Type": "application/json",
@@ -55,7 +55,7 @@ async function main() {
   const [deployer] = await ethers.getSigners();
   console.log("🚀 Initializing contract at:", contractAddress);
   console.log("👤 Deployer:", deployer.address);
-  console.log("🌐 Quizzdle API URL:", QUIZZDLE_API_URL);
+  console.log("🌐 Quizzdle API URL:", NEXT_PUBLIC_QUIZZDLE_API_URL);
 
   const Dailydle = await ethers.getContractFactory("Dailydle");
   const dailydle = Dailydle.attach(contractAddress);

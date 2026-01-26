@@ -23,7 +23,7 @@ import type {
   TypedContractMethod,
 } from "./common";
 
-export interface GmDailydleInterface extends Interface {
+export interface GmQuizzdleInterface extends Interface {
   getFunction(
     nameOrSignature:
       | "canGmToday"
@@ -208,11 +208,11 @@ export namespace StreakBrokenEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
-export interface GmDailydle extends BaseContract {
-  connect(runner?: ContractRunner | null): GmDailydle;
+export interface GmQuizzdle extends BaseContract {
+  connect(runner?: ContractRunner | null): GmQuizzdle;
   waitForDeployment(): Promise<this>;
 
-  interface: GmDailydleInterface;
+  interface: GmQuizzdleInterface;
 
   queryFilter<TCEvent extends TypedContractEvent>(
     event: TCEvent,

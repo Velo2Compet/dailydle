@@ -207,7 +207,7 @@ export function StatsHeader() {
       <div className="flex justify-center items-stretch gap-1.5 sm:gap-2 md:gap-3 flex-nowrap max-w-[1200px] mx-auto p-2 sm:p-3 md:p-4 rounded-xl bg-white/[0.08] backdrop-blur-lg border border-white/10">
         <StatCard
           icon={<HomeIcon />}
-          label="Accueil"
+          label="Home"
           href="/"
           variant="button"
         />
@@ -215,7 +215,7 @@ export function StatsHeader() {
         <StatCard
           icon={<TrophyIcon />}
           value={userTotalWins}
-          label="Vos victoires"
+          label="Your wins"
           variant="highlight"
           flex
         />
@@ -230,16 +230,25 @@ export function StatsHeader() {
         <StatCard
           icon={<TodayIcon />}
           value={winnersTodayCount}
-          label="Aujourd'hui"
+          label="Today"
           flex
         />
 
-        <StatCard
-          icon={isConnected ? <ConnectedIcon /> : <WalletIcon />}
-          label={isConnected ? "Connecté" : "Connecter"}
-          onClick={handleWalletClick}
-          variant="button"
-        />
+        {isConnected ? (
+          <StatCard
+            icon={<ConnectedIcon />}
+            label="Profile"
+            href="/profile"
+            variant="button"
+          />
+        ) : (
+          <StatCard
+            icon={<WalletIcon />}
+            label="Connect"
+            onClick={handleWalletClick}
+            variant="button"
+          />
+        )}
       </div>
     </div>
   );

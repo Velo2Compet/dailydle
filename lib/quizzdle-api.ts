@@ -4,9 +4,9 @@
  * Routes: parent-categories, categories/{id}
  */
 
-const QUIZZDLE_API_URL =
-  process.env.QUIZZDLE_API_URL || "https://quizzdle.fr";
-const BASE = `${QUIZZDLE_API_URL}/api/public`;
+const NEXT_PUBLIC_QUIZZDLE_API_URL =
+  process.env.NEXT_PUBLIC_QUIZZDLE_API_URL || "";
+const BASE = `${NEXT_PUBLIC_QUIZZDLE_API_URL}/api/public`;
 // Nettoyer la clé API de tout caractère invisible/non-ASCII
 const API_KEY = (process.env.QUIZZDLE_API_KEY ?? "").trim().replace(/[^\x20-\x7E]/g, "");
 
@@ -174,7 +174,7 @@ export function flattenCategories(
 export function quizzdleImageUrl(path: string | null | undefined): string {
   if (!path) return "";
   if (path.startsWith("http")) return path;
-  const base = QUIZZDLE_API_URL.replace(/\/$/, "");
+  const base = NEXT_PUBLIC_QUIZZDLE_API_URL.replace(/\/$/, "");
   const p = path.startsWith("/") ? path : `/${path}`;
   return p.startsWith("/img") ? `${base}${p}` : `${base}/img${p.startsWith("/") ? "" : "/"}${p}`;
 }

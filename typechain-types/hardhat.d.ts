@@ -14,44 +14,62 @@ import * as Contracts from ".";
 declare module "hardhat/types/runtime" {
   interface HardhatEthersHelpers extends HardhatEthersHelpersBase {
     getContractFactory(
-      name: "Dailydle",
+      name: "GmQuizzdle",
       signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.Dailydle__factory>;
+    ): Promise<Contracts.GmQuizzdle__factory>;
     getContractFactory(
-      name: "GmDailydle",
+      name: "Quizzdle",
       signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.GmDailydle__factory>;
+    ): Promise<Contracts.Quizzdle__factory>;
+    getContractFactory(
+      name: "QuizzdleReferal",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.QuizzdleReferal__factory>;
 
     getContractAt(
-      name: "Dailydle",
+      name: "GmQuizzdle",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
-    ): Promise<Contracts.Dailydle>;
+    ): Promise<Contracts.GmQuizzdle>;
     getContractAt(
-      name: "GmDailydle",
+      name: "Quizzdle",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
-    ): Promise<Contracts.GmDailydle>;
+    ): Promise<Contracts.Quizzdle>;
+    getContractAt(
+      name: "QuizzdleReferal",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.QuizzdleReferal>;
 
     deployContract(
-      name: "Dailydle",
+      name: "GmQuizzdle",
       signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.Dailydle>;
+    ): Promise<Contracts.GmQuizzdle>;
     deployContract(
-      name: "GmDailydle",
+      name: "Quizzdle",
       signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.GmDailydle>;
+    ): Promise<Contracts.Quizzdle>;
+    deployContract(
+      name: "QuizzdleReferal",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.QuizzdleReferal>;
 
     deployContract(
-      name: "Dailydle",
+      name: "GmQuizzdle",
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.Dailydle>;
+    ): Promise<Contracts.GmQuizzdle>;
     deployContract(
-      name: "GmDailydle",
+      name: "Quizzdle",
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.GmDailydle>;
+    ): Promise<Contracts.Quizzdle>;
+    deployContract(
+      name: "QuizzdleReferal",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.QuizzdleReferal>;
 
     // default types
     getContractFactory(

@@ -88,31 +88,6 @@ await dailydle.collectionCharacterIds(1);
 await dailydle.getDailyCharacterId(1);
 ```
 
-## Structure attendue du JSON
-
-Votre fichier `data/test-collections.json` doit avoir cette structure :
-
-```json
-[
-  {
-    "id": 1,
-    "name": "League of Legends",
-    "characters": [
-      {
-        "id": 1,
-        "name": "Champion 1",
-        ...
-      },
-      {
-        "id": 2,
-        "name": "Champion 2",
-        ...
-      }
-    ]
-  }
-]
-```
-
 **Important** : Chaque personnage doit avoir un champ `id` unique qui sera stocké on-chain.
 
 ## Commandes utiles

@@ -19,8 +19,8 @@ export function RootProvider({ children }: { children: ReactNode }) {
           display: "modal",
           preference: "all",
         },
-        analytics: false,
       }}
+      projectId={undefined}
       miniKit={{
         enabled: true,
         autoConnect: true,

@@ -3,16 +3,16 @@ const { ethers } = require("hardhat");
 async function main() {
   const [deployer] = await ethers.getSigners();
 
-  console.log("Deploying GmDailydle with the account:", deployer.address);
+  console.log("Deploying GmQuizzdle with the account:", deployer.address);
   console.log("Account balance:", (await ethers.provider.getBalance(deployer.address)).toString());
 
-  const GmDailydle = await ethers.getContractFactory("GmDailydle");
-  const gmDailydle = await GmDailydle.deploy();
+  const GmQuizzdle = await ethers.getContractFactory("GmQuizzdle");
+  const gmQuizzdle = await GmQuizzdle.deploy();
 
-  await gmDailydle.waitForDeployment();
+  await gmQuizzdle.waitForDeployment();
 
-  const address = await gmDailydle.getAddress();
-  console.log("GmDailydle deployed to:", address);
+  const address = await gmQuizzdle.getAddress();
+  console.log("GmQuizzdle deployed to:", address);
 
   // Sauvegarder l'adresse pour le frontend
   console.log("\n✅ Add this to your .env.local file:");

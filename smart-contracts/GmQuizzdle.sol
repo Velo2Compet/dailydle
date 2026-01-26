@@ -2,25 +2,25 @@
 pragma solidity ^0.8.24;
 
 /**
- * @title GmDailydle
- * @dev Smart contract pour tracker les streaks quotidiennes des utilisateurs
- * Les utilisateurs doivent appeler gm() chaque jour pour maintenir leur streak
+ * @title GmQuizzdle
+ * @dev Smart contract to track daily streaks for users
+ * Users must call gm() each day to maintain their streak
  */
-contract GmDailydle {
-    // Owner du contrat
+contract GmQuizzdle {
+    // Owner of the contract
     address public owner;
 
-    // Mappings pour le streak
-    mapping(address => uint256) public currentStreak;    // Streak actuelle du joueur
-    mapping(address => uint256) public longestStreak;    // Plus longue streak du joueur
-    mapping(address => uint256) public lastGmDay;        // Dernier jour où le joueur a fait GM
-    mapping(address => uint256) public totalGms;         // Nombre total de GMs du joueur
+    // Mappings for streak
+    mapping(address => uint256) public currentStreak;    // Current streak of the player
+    mapping(address => uint256) public longestStreak;    // Longest streak of the player
+    mapping(address => uint256) public lastGmDay;        // Last day the player said GM
+    mapping(address => uint256) public totalGms;         // Total number of GMs by the player
 
-    // Statistiques globales
-    uint256 public totalGmsGlobal;                       // Total de tous les GMs
-    uint256 public uniquePlayers;                        // Nombre de joueurs uniques
-    mapping(address => bool) public hasPlayedBefore;     // Si le joueur a déjà joué
-    address[] public players;                            // Liste de tous les joueurs
+    // Global statistics
+    uint256 public totalGmsGlobal;                       // Total of all GMs
+    uint256 public uniquePlayers;                        // Number of unique players
+    mapping(address => bool) public hasPlayedBefore;     // If the player has played before
+    address[] public players;                            // List of all players
 
     // Events
     event GmSent(address indexed player, uint256 streak, uint256 day);
@@ -37,45 +37,45 @@ contract GmDailydle {
     }
 
     /**
-     * @dev Envoie un GM pour maintenir ou démarrer la streak
-     * Peut être appelé une fois par jour par utilisateur
+     * @dev Send a GM to maintain or start the streak
+     * Can be called once per day per user
      */
     function gm() public {
         uint256 currentDay = block.timestamp / 86400;
 
-        // Vérifier que l'utilisateur n'a pas déjà fait GM aujourd'hui
+        // Check that the user hasn't already said GM today
         require(lastGmDay[msg.sender] != currentDay, "Already said GM today");
 
-        // Tracker les nouveaux joueurs
+        // Track new players
         if (!hasPlayedBefore[msg.sender]) {
             hasPlayedBefore[msg.sender] = true;
             players.push(msg.sender);
             uniquePlayers++;
         }
 
-        // Vérifier si la streak continue ou est cassée
+        // Check if the streak continues or is broken
         if (lastGmDay[msg.sender] == currentDay - 1) {
-            // Jour consécutif - incrémenter la streak
+            // Consecutive day - increment the streak
             currentStreak[msg.sender]++;
         } else if (lastGmDay[msg.sender] == 0) {
-            // Premier GM ever
+            // First GM ever
             currentStreak[msg.sender] = 1;
         } else {
-            // Streak cassée - émettre l'event et reset
+            // Streak broken - emit event and reset
             if (currentStreak[msg.sender] > 0) {
                 emit StreakBroken(msg.sender, currentStreak[msg.sender]);
             }
             currentStreak[msg.sender] = 1;
         }
 
-        // Mettre à jour le dernier jour de GM
+        // Update the last GM day
         lastGmDay[msg.sender] = currentDay;
 
-        // Incrémenter les compteurs
+        // Increment the counters
         totalGms[msg.sender]++;
         totalGmsGlobal++;
 
-        // Mettre à jour la plus longue streak si nécessaire
+        // Update the longest streak if necessary
         if (currentStreak[msg.sender] > longestStreak[msg.sender]) {
             longestStreak[msg.sender] = currentStreak[msg.sender];
             emit NewLongestStreak(msg.sender, currentStreak[msg.sender]);
@@ -85,7 +85,7 @@ contract GmDailydle {
     }
 
     /**
-     * @dev Vérifie si l'utilisateur peut faire GM aujourd'hui
+     * @dev Check if the user can say GM today
      */
     function canGmToday(address _player) public view returns (bool) {
         uint256 currentDay = block.timestamp / 86400;
@@ -93,19 +93,19 @@ contract GmDailydle {
     }
 
     /**
-     * @dev Vérifie si la streak est toujours active (pas cassée)
-     * Une streak est active si le dernier GM était aujourd'hui ou hier
+     * @dev Check if the streak is still active (not broken)
+     * A streak is active if the last GM was today or yesterday
      */
     function isStreakActive(address _player) public view returns (bool) {
         uint256 currentDay = block.timestamp / 86400;
         uint256 lastDay = lastGmDay[_player];
 
-        // Streak active si GM aujourd'hui ou hier
+        // Streak active if GM today or yesterday
         return lastDay == currentDay || lastDay == currentDay - 1;
     }
 
     /**
-     * @dev Retourne le streak effectif (0 si cassé)
+     * @dev Returns the effective streak (0 if broken)
      */
     function getEffectiveStreak(address _player) public view returns (uint256) {
         if (isStreakActive(_player)) {
@@ -115,7 +115,7 @@ contract GmDailydle {
     }
 
     /**
-     * @dev Retourne toutes les stats d'un joueur en un seul appel
+     * @dev Returns all stats of a player in a single call
      */
     function getPlayerStats(address _player) public view returns (
         uint256 streak,
@@ -132,7 +132,7 @@ contract GmDailydle {
     }
 
     /**
-     * @dev Retourne les stats globales
+     * @dev Returns the global stats
      */
     function getGlobalStats() public view returns (
         uint256 totalGms_,
@@ -143,8 +143,8 @@ contract GmDailydle {
     }
 
     /**
-     * @dev Retourne la liste de tous les joueurs avec leurs longest streaks
-     * Réservé au owner du contrat
+     * @dev Returns the list of all players with their longest streaks
+     * Reserved for the contract owner
      */
     function getAllPlayersLongestStreaks() public view onlyOwner returns (
         address[] memory playerAddresses,
@@ -161,7 +161,7 @@ contract GmDailydle {
     }
 
     /**
-     * @dev Retourne le nombre total de joueurs
+     * @dev Returns the total number of players
      */
     function getPlayersCount() public view returns (uint256) {
         return players.length;
