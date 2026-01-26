@@ -24,7 +24,6 @@ export function HomeView({ categories }: HomeViewProps) {
       <StatsHeader />
       <main className={styles.mainContainer}>
         <div id="categories" className={styles.categoriesWrapper}>
-          <h2 className={styles.sectionTitle}>Catégories</h2>
           {categories.length === 0 ? (
             <div className={styles.emptyState}>
               <p>Aucune collection disponible.</p>
@@ -42,19 +41,14 @@ export function HomeView({ categories }: HomeViewProps) {
                     {cat.image ? (
                       <img
                         src={quizzdleImageUrl(cat.image)}
-                        alt=""
+                        alt={cat.name}
                         className={styles.categoryCardImage}
                       />
-                    ) : null}
-                    <p
-                      className={
-                        cat.image
-                          ? styles.categoryCardName
-                          : styles.categoryCardNameOnly
-                      }
-                    >
-                      {cat.name}
-                    </p>
+                    ) : (
+                      <p className={styles.categoryCardNameOnly}>
+                        {cat.name}
+                      </p>
+                    )}
                   </div>
                 </Link>
               ))}
