@@ -2,5 +2,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type { Dailydle } from "./Dailydle";
+export type { GmDailydle } from "./GmDailydle";
 export * as factories from "./factories";
 export { Dailydle__factory } from "./factories/Dailydle__factory";
+export { GmDailydle__factory } from "./factories/GmDailydle__factory";

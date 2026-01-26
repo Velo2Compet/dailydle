@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useMiniKit } from "@coinbase/onchainkit/minikit";
 import Link from "next/link";
 import { StatsHeader } from "@/components/StatsHeader";
+import { GmStreakCard } from "@/components/GmStreakCard";
 import type { QuizzdleCategoryRef } from "@/lib/quizzdle-api";
 import { quizzdleImageUrl } from "@/lib/quizzdle-api";
 import styles from "@/app/page.module.css";
@@ -23,6 +24,11 @@ export function HomeView({ categories }: HomeViewProps) {
     <div className={styles.container}>
       <StatsHeader />
       <main className={styles.mainContainer}>
+        {/* GM Streak Card */}
+        <div className="pb-4">
+          <GmStreakCard />
+        </div>
+
         <div id="categories" className={styles.categoriesWrapper}>
           {categories.length === 0 ? (
             <div className={styles.emptyState}>

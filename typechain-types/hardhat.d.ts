@@ -17,23 +17,41 @@ declare module "hardhat/types/runtime" {
       name: "Dailydle",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.Dailydle__factory>;
+    getContractFactory(
+      name: "GmDailydle",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.GmDailydle__factory>;
 
     getContractAt(
       name: "Dailydle",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
     ): Promise<Contracts.Dailydle>;
+    getContractAt(
+      name: "GmDailydle",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.GmDailydle>;
 
     deployContract(
       name: "Dailydle",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.Dailydle>;
+    deployContract(
+      name: "GmDailydle",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.GmDailydle>;
 
     deployContract(
       name: "Dailydle",
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.Dailydle>;
+    deployContract(
+      name: "GmDailydle",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.GmDailydle>;
 
     // default types
     getContractFactory(

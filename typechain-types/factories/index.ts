@@ -2,3 +2,4 @@
 /* tslint:disable */
 /* eslint-disable */
 export { Dailydle__factory } from "./Dailydle__factory";
+export { GmDailydle__factory } from "./GmDailydle__factory";
