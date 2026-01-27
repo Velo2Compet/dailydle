@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ReactNode, MouseEvent } from "react";
+import { ReactNode } from "react";
 
 export type StatCardVariant = "default" | "highlight" | "button";
 

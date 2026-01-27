@@ -4,9 +4,6 @@ import { Character } from "@/types/game";
 
 interface CharacterSelectorProps {
   characters: Character[];
-  selectedCharacterId: number | null;
-  selectedCharacterName?: string;
-  selectedCharacterImage?: string;
   onSelect: (characterId: number, characterName: string, characterImage?: string) => void;
   disabled?: boolean;
   disabledCharacters?: number[];
@@ -14,9 +11,6 @@ interface CharacterSelectorProps {
 
 export function CharacterSelector({
   characters,
-  selectedCharacterId,
-  selectedCharacterName,
-  selectedCharacterImage,
   onSelect,
   disabled = false,
   disabledCharacters = [],

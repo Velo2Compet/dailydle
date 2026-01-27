@@ -505,9 +505,6 @@ export function GameBoard({ collection }: GameBoardProps) {
                 <div className="flex-1">
                   <CharacterSelector
                     characters={collection.characters || []}
-                    selectedCharacterId={selectedCharacterId}
-                    selectedCharacterName={selectedCharacterName}
-                    selectedCharacterImage={selectedCharacterImage}
                     onSelect={handleCharacterSelect}
                     disabled={isPending || isConfirming || gameState.isGameOver || !isConnected}
                     disabledCharacters={gameState.guesses.map(g => g.characterId)}
