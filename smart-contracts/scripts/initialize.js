@@ -111,6 +111,23 @@ async function main() {
     process.exit(1);
   }
 
+  // Set referral contract
+  const referralContractAddress = process.env.NEXT_PUBLIC_REFERAL_CONTRACT_ADDRESS;
+  if (referralContractAddress) {
+    console.log("\n🤝 Setting referral contract...");
+    try {
+      const refTx = await dailydle.setReferralContract(referralContractAddress, {
+        gasPrice: (await ethers.provider.getFeeData()).gasPrice,
+      });
+      await refTx.wait();
+      console.log(`✅ Referral contract set to ${referralContractAddress} (tx: ${refTx.hash})`);
+    } catch (error) {
+      console.error("❌ Failed to set referral contract:", error.message);
+    }
+  } else {
+    console.log("\n⚠️  NEXT_PUBLIC_REFERAL_CONTRACT_ADDRESS not set, skipping referral contract setup");
+  }
+
   // Set salt on contract
   console.log("\n🔑 Setting salt on contract...");
   try {

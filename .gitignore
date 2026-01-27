@@ -50,5 +50,5 @@ next-env.d.ts
 /smart-contracts/typechain-types
 
 DEPLOYMENT_GUIDE.md
-
+TODO.md
 settings.local.json

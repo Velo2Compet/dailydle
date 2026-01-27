@@ -18,6 +18,10 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.GmQuizzdle__factory>;
     getContractFactory(
+      name: "IQuizzdleReferal",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.IQuizzdleReferal__factory>;
+    getContractFactory(
       name: "Quizzdle",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.Quizzdle__factory>;
@@ -32,6 +36,11 @@ declare module "hardhat/types/runtime" {
       signer?: ethers.Signer
     ): Promise<Contracts.GmQuizzdle>;
     getContractAt(
+      name: "IQuizzdleReferal",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.IQuizzdleReferal>;
+    getContractAt(
       name: "Quizzdle",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
@@ -47,6 +56,10 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.GmQuizzdle>;
     deployContract(
+      name: "IQuizzdleReferal",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IQuizzdleReferal>;
+    deployContract(
       name: "Quizzdle",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.Quizzdle>;
@@ -60,6 +73,11 @@ declare module "hardhat/types/runtime" {
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.GmQuizzdle>;
+    deployContract(
+      name: "IQuizzdleReferal",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IQuizzdleReferal>;
     deployContract(
       name: "Quizzdle",
       args: any[],

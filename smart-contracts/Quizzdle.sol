@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+interface IQuizzdleReferal {
+    function referredBy(address user) external view returns (address);
+}
+
 /**
  * @title Quizzdle
  * @dev Smart contract pour le jeu de devinette de personnages on-chain
@@ -41,6 +45,13 @@ contract Quizzdle {
     mapping(uint256 => mapping(address => bool)) public hasWonEver; // collectionId => player => hasWon
     mapping(uint256 => uint256) public totalWinnersCount; // collectionId => count
 
+    // Referral reward system
+    IQuizzdleReferal public referralContract;
+    mapping(address => uint256) public referralRewards; // referrer => claimable rewards in wei
+    mapping(address => uint256) public totalReferralEarned; // referrer => lifetime total earned (never reset)
+    uint256 public totalReferralRewards; // total rewards accumulated
+    uint256 public totalReferralsClaimed; // total rewards claimed
+
     // Stockage des collections : seulement les IDs des personnages
     mapping(uint256 => uint256[]) public collectionCharacterIds; // collectionId => array d'IDs de personnages
     mapping(uint256 => bool) public collectionExists; // collectionId => true/false pour verifier l'existence
@@ -58,6 +69,9 @@ contract Quizzdle {
     event FeeUpdated(uint256 newFee);
     event FundsWithdrawn(address indexed to, uint256 amount);
     event SaltUpdated();
+    event ReferralRewardCredited(address indexed referrer, address indexed player, uint256 amount);
+    event ReferralRewardsClaimed(address indexed referrer, uint256 amount);
+    event ReferralContractUpdated(address indexed newContract);
 
     // Modifiers
     modifier validCollection(uint256 _collectionId) {
@@ -148,6 +162,18 @@ contract Quizzdle {
         // Track the fee paid
         totalPaid[msg.sender] += msg.value;
         globalTotalPaid += msg.value;
+
+        // Credit 10% referral reward to referrer if exists
+        if (address(referralContract) != address(0)) {
+            address referrer = referralContract.referredBy(msg.sender);
+            if (referrer != address(0)) {
+                uint256 referralAmount = msg.value / 10;
+                referralRewards[referrer] += referralAmount;
+                totalReferralEarned[referrer] += referralAmount;
+                totalReferralRewards += referralAmount;
+                emit ReferralRewardCredited(referrer, msg.sender, referralAmount);
+            }
+        }
 
         uint256 currentDay = block.timestamp / 86400;
 
@@ -357,6 +383,56 @@ contract Quizzdle {
     }
 
     /**
+     * @dev Definit le contrat de referral (seulement owner)
+     */
+    function setReferralContract(address _referralContract)
+        public
+        onlyOwner
+    {
+        require(_referralContract != address(0), "Invalid referral contract address");
+        referralContract = IQuizzdleReferal(_referralContract);
+        emit ReferralContractUpdated(_referralContract);
+    }
+
+    /**
+     * @dev Permet a un referrer de reclamer ses recompenses accumulees
+     */
+    function claimReferralRewards() external {
+        uint256 amount = referralRewards[msg.sender];
+        require(amount > 0, "No referral rewards to claim");
+
+        referralRewards[msg.sender] = 0;
+        totalReferralsClaimed += amount;
+
+        (bool success, ) = payable(msg.sender).call{value: amount}("");
+        require(success, "Referral reward transfer failed");
+
+        emit ReferralRewardsClaimed(msg.sender, amount);
+    }
+
+    /**
+     * @dev Recupere les recompenses de referral en attente pour un utilisateur
+     */
+    function pendingReferralRewards(address _user)
+        external
+        view
+        returns (uint256)
+    {
+        return referralRewards[_user];
+    }
+
+    /**
+     * @dev Recupere le total des recompenses de referral gagnees par un utilisateur (jamais remis a zero)
+     */
+    function getTotalReferralEarned(address _user)
+        external
+        view
+        returns (uint256)
+    {
+        return totalReferralEarned[_user];
+    }
+
+    /**
      * @dev Definit le salt pour le calcul du personnage du jour (seulement owner)
      * @param _newSalt Nouveau salt (bytes32)
      */
@@ -390,12 +466,14 @@ contract Quizzdle {
     {
         require(_to != address(0), "Invalid address");
         uint256 balance = address(this).balance;
-        require(balance > 0, "No funds to withdraw");
+        uint256 reservedForReferrals = totalReferralRewards - totalReferralsClaimed;
+        uint256 withdrawable = balance > reservedForReferrals ? balance - reservedForReferrals : 0;
+        require(withdrawable > 0, "No funds to withdraw");
 
-        (bool success, ) = _to.call{value: balance}("");
+        (bool success, ) = _to.call{value: withdrawable}("");
         require(success, "Withdrawal failed");
 
-        emit FundsWithdrawn(_to, balance);
+        emit FundsWithdrawn(_to, withdrawable);
     }
 
     /**

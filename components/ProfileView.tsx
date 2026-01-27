@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { parseAbi } from "viem";
 import { baseSepolia } from "wagmi/chains";
 import { useGmStats } from "@/hooks/useGmStreak";
-import { useReferalStats, useSetReferralCode } from "@/hooks/useReferal";
+import { useReferalStats, useSetReferralCode, useReferralRewards, useClaimReferralRewards } from "@/hooks/useReferal";
+import { formatEther } from "viem";
 import { WalletButton } from "./WalletButton";
 import { StatsHeader } from "./StatsHeader";
 import { Avatar, Name } from "@coinbase/onchainkit/identity";
@@ -69,6 +70,16 @@ const UsersIcon = () => (
   </svg>
 );
 
+const GiftIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="20 12 20 22 4 22 4 12" />
+    <rect x="2" y="7" width="20" height="5" />
+    <line x1="12" y1="22" x2="12" y2="7" />
+    <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z" />
+    <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z" />
+  </svg>
+);
+
 const LogoutIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -99,6 +110,10 @@ export function ProfileView() {
   // Set referral code
   const { setCode, isPending, isConfirming, isConfirmed } = useSetReferralCode();
 
+  // Referral Rewards
+  const { pendingRewards, totalEarned, refetchRewards } = useReferralRewards();
+  const { claim, isPending: isClaimPending, isConfirming: isClaimConfirming, isConfirmed: isClaimConfirmed } = useClaimReferralRewards();
+
   // Game stats
   const { data: userTotalWins } = useReadContract({
     address: CONTRACT_ADDRESS,
@@ -122,6 +137,16 @@ export function ProfileView() {
       return () => clearTimeout(timeout);
     }
   }, [isConfirmed, refetchReferal]);
+
+  // Refetch rewards after claim
+  useEffect(() => {
+    if (isClaimConfirmed) {
+      const timeout = setTimeout(() => {
+        refetchRewards();
+      }, 2000);
+      return () => clearTimeout(timeout);
+    }
+  }, [isClaimConfirmed, refetchRewards]);
 
   const totalWins = userTotalWins ? Number(userTotalWins) : 0;
 
@@ -253,100 +278,144 @@ export function ProfileView() {
             </div>
           </div>
 
-          {/* Referral Section */}
+          {/* Referral Section + Rewards Row */}
           {referalContractEnabled && (
-            <div className="bg-gradient-to-r from-[#121217] via-[#1a1a2e] to-[#121217] border border-violet-500/20 rounded-2xl p-6 mb-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 rounded-lg bg-violet-500/20 text-violet-400">
-                  <UsersIcon />
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold text-white">Invite Friends</h2>
-                  <p className="text-white/50 text-sm">Share your referral link</p>
-                </div>
-              </div>
-
-              {/* Referral Code */}
-              {referralCode && !isEditingCode ? (
-                <div className="mb-4">
-                  <p className="text-white/50 text-xs mb-2">Your referral code</p>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl font-bold text-violet-400">{referralCode}</span>
-                    <button
-                      onClick={() => setIsEditingCode(true)}
-                      className="text-white/40 hover:text-white text-sm"
-                    >
-                      Edit
-                    </button>
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              {/* Invite Friends */}
+              <div className="bg-gradient-to-r from-[#121217] via-[#1a1a2e] to-[#121217] border border-violet-500/20 rounded-2xl p-6 flex flex-col">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 rounded-lg bg-violet-500/20 text-violet-400">
+                    <UsersIcon />
                   </div>
-                  {referralCount > 0 && (
-                    <p className="text-white/50 text-sm mt-1">
-                      {referralCount} friend{referralCount > 1 ? "s" : ""} joined with your code
+                  <div>
+                    <h2 className="text-lg font-bold text-white">Invite Friends</h2>
+                    <p className="text-white/50 text-sm">Share your referral link</p>
+                  </div>
+                </div>
+
+                {/* Referral Stats */}
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div className="bg-white/5 rounded-xl p-3 text-center">
+                    <p className="text-xl font-bold text-white">{referralCount}</p>
+                    <p className="text-white/50 text-xs">Referred users</p>
+                  </div>
+                  <div className="bg-white/5 rounded-xl p-3 text-center">
+                    <p className="text-xl font-bold text-violet-400">
+                      {formatEther(totalEarned)} ETH
                     </p>
-                  )}
-                </div>
-              ) : (
-                <div className="mb-4">
-                  <p className="text-white/50 text-xs mb-2">
-                    {referralCode ? "Change your referral code" : "Create your referral code"}
-                  </p>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="yourcode"
-                      value={newCode}
-                      onChange={(e) => setNewCode(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ""))}
-                      maxLength={20}
-                      className="flex-1 px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-violet-500/50"
-                    />
-                    <button
-                      onClick={handleSetCode}
-                      disabled={newCode.length < 3 || isPending || isConfirming}
-                      className="px-4 py-2 bg-violet-500 text-white rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-violet-600 transition-colors"
-                    >
-                      {isPending || isConfirming ? "..." : "Save"}
-                    </button>
-                    {referralCode && (
-                      <button
-                        onClick={() => {
-                          setIsEditingCode(false);
-                          setNewCode("");
-                        }}
-                        className="px-4 py-2 bg-white/10 text-white rounded-xl font-medium hover:bg-white/20 transition-colors"
-                      >
-                        Cancel
-                      </button>
-                    )}
+                    <p className="text-white/50 text-xs">Volume generated</p>
                   </div>
-                  <p className="text-white/40 text-xs mt-2">3-20 characters, letters and numbers only</p>
                 </div>
-              )}
 
-              {/* Share URL */}
-              <div className="bg-white/5 rounded-xl p-3 flex items-center gap-2">
-                <input
-                  type="text"
-                  value={shareUrl}
-                  readOnly
-                  className="flex-1 bg-transparent text-white/70 text-sm outline-none"
-                />
+                {/* Referral Code */}
+                {referralCode && !isEditingCode ? (
+                  <div className="mb-4">
+                    <p className="text-white/50 text-xs mb-2">Your referral code</p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl font-bold text-violet-400">{referralCode}</span>
+                      <button
+                        onClick={() => setIsEditingCode(true)}
+                        className="text-white/40 hover:text-white text-sm"
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mb-4">
+                    <p className="text-white/50 text-xs mb-2">
+                      {referralCode ? "Change your referral code" : "Create your referral code"}
+                    </p>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="yourcode"
+                        value={newCode}
+                        onChange={(e) => setNewCode(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ""))}
+                        maxLength={20}
+                        className="flex-1 px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-violet-500/50"
+                      />
+                      <button
+                        onClick={handleSetCode}
+                        disabled={newCode.length < 3 || isPending || isConfirming}
+                        className="px-4 py-2 bg-violet-500 text-white rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-violet-600 transition-colors"
+                      >
+                        {isPending || isConfirming ? "..." : "Save"}
+                      </button>
+                      {referralCode && (
+                        <button
+                          onClick={() => {
+                            setIsEditingCode(false);
+                            setNewCode("");
+                          }}
+                          className="px-4 py-2 bg-white/10 text-white rounded-xl font-medium hover:bg-white/20 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-white/40 text-xs mt-2">3-20 characters, letters and numbers only</p>
+                  </div>
+                )}
+
+                {/* Share URL */}
+                <div className="bg-white/5 rounded-xl p-3 flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={shareUrl}
+                    readOnly
+                    className="flex-1 bg-transparent text-white/70 text-sm outline-none"
+                  />
+                  <button
+                    onClick={handleCopy}
+                    className="p-2 text-white/60 hover:text-white transition-colors"
+                    title="Copy link"
+                  >
+                    {copied ? <CheckIcon /> : <CopyIcon />}
+                  </button>
+                </div>
+
+                {/* Share Button */}
                 <button
-                  onClick={handleCopy}
-                  className="p-2 text-white/60 hover:text-white transition-colors"
-                  title="Copy link"
+                  onClick={handleShare}
+                  className="w-full mt-4 py-3 bg-gradient-to-r from-violet-500 to-blue-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
                 >
-                  {copied ? <CheckIcon /> : <CopyIcon />}
+                  <ShareIcon />
+                  Share with friends
                 </button>
               </div>
 
-              {/* Share Button */}
-              <button
-                onClick={handleShare}
-                className="w-full mt-4 py-3 bg-gradient-to-r from-violet-500 to-blue-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
-              >
-                <ShareIcon />
-                Share with friends
-              </button>
+              {/* Referral Rewards */}
+              <div className="bg-gradient-to-r from-[#121217] via-[#1a1a2e] to-[#121217] border border-violet-500/20 rounded-2xl p-6 flex flex-col">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 rounded-lg bg-violet-500/20 text-violet-400">
+                    <GiftIcon />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-white">Referral Rewards</h2>
+                    <p className="text-white/50 text-sm">Earnings from your referrals</p>
+                  </div>
+                </div>
+
+                <div className="bg-white/5 rounded-xl p-4 mb-4 text-center flex-1 flex flex-col items-center justify-center">
+                  <p className="text-3xl font-bold text-violet-400">
+                    {formatEther(pendingRewards)} ETH
+                  </p>
+                  <p className="text-white/50 text-sm mt-1">Pending rewards</p>
+                </div>
+
+                <button
+                  onClick={() => claim()}
+                  disabled={isClaimPending || isClaimConfirming || pendingRewards === BigInt(0)}
+                  className="w-full py-3 bg-gradient-to-r from-violet-500 to-blue-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isClaimPending || isClaimConfirming ? "Claiming..." : "Claim Rewards"}
+                </button>
+
+                {isClaimConfirmed && (
+                  <p className="text-violet-400 text-sm text-center mt-2">Rewards claimed!</p>
+                )}
+              </div>
             </div>
           )}
 

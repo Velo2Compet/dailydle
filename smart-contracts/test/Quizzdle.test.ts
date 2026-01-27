@@ -561,4 +561,151 @@ describe("Quizzdle", function () {
       expect(await quizzdle.getGlobalTotalWins()).to.equal(3);
     });
   });
+
+  describe("Referral Contract Setup", function () {
+    it("Should allow owner to set referral contract", async function () {
+      const ReferralFactory = await ethers.getContractFactory("QuizzdleReferal");
+      const referralContract = await ReferralFactory.deploy();
+      await referralContract.waitForDeployment();
+
+      await expect(quizzdle.setReferralContract(await referralContract.getAddress()))
+        .to.emit(quizzdle, "ReferralContractUpdated");
+    });
+
+    it("Should revert setting zero address", async function () {
+      await expect(quizzdle.setReferralContract(ethers.ZeroAddress))
+        .to.be.revertedWith("Invalid referral contract address");
+    });
+
+    it("Should revert if non-owner sets referral contract", async function () {
+      await expect(quizzdle.connect(player1).setReferralContract(player2.address))
+        .to.be.revertedWith("Only owner can call this function");
+    });
+  });
+
+  describe("Referral Rewards", function () {
+    let dailyCharacterId: bigint;
+    let referralContract: any;
+
+    beforeEach(async function () {
+      // Deploy referral contract
+      const ReferralFactory = await ethers.getContractFactory("QuizzdleReferal");
+      referralContract = await ReferralFactory.deploy();
+      await referralContract.waitForDeployment();
+
+      // Link referral contract to game contract
+      await quizzdle.setReferralContract(await referralContract.getAddress());
+
+      // Setup collection and salt
+      await quizzdle.updateCollectionCharacterIds(COLLECTION_ID, CHARACTER_IDS);
+      await quizzdle.setSalt(TEST_SALT);
+      dailyCharacterId = await quizzdle.getDailyCharacterId(COLLECTION_ID);
+
+      // player2 is referrer, player1 registers with player2's code
+      await referralContract.connect(player2).setReferralCode("CODE123");
+      await referralContract.connect(player1).registerWithReferral("CODE123");
+    });
+
+    it("Should credit 10% referral reward when referred player guesses", async function () {
+      await quizzdle.connect(player1).makeGuess(COLLECTION_ID, dailyCharacterId, { value: DEFAULT_FEE });
+      const expectedReward = DEFAULT_FEE / 10n;
+      expect(await quizzdle.pendingReferralRewards(player2.address)).to.equal(expectedReward);
+    });
+
+    it("Should not credit referral reward when player has no referrer", async function () {
+      await quizzdle.connect(player3).makeGuess(COLLECTION_ID, dailyCharacterId, { value: DEFAULT_FEE });
+      expect(await quizzdle.pendingReferralRewards(player3.address)).to.equal(0);
+    });
+
+    it("Should accumulate rewards across multiple guesses", async function () {
+      const wrongId = CHARACTER_IDS.find((id) => BigInt(id) !== dailyCharacterId) || 999;
+      await quizzdle.connect(player1).makeGuess(COLLECTION_ID, wrongId, { value: DEFAULT_FEE });
+      await quizzdle.connect(player1).makeGuess(COLLECTION_ID, dailyCharacterId, { value: DEFAULT_FEE });
+      const expectedReward = (DEFAULT_FEE / 10n) * 2n;
+      expect(await quizzdle.pendingReferralRewards(player2.address)).to.equal(expectedReward);
+    });
+
+    it("Should allow referrer to claim rewards", async function () {
+      await quizzdle.connect(player1).makeGuess(COLLECTION_ID, dailyCharacterId, { value: DEFAULT_FEE });
+      const expectedReward = DEFAULT_FEE / 10n;
+      const balanceBefore = await ethers.provider.getBalance(player2.address);
+
+      const tx = await quizzdle.connect(player2).claimReferralRewards();
+      const receipt = await tx.wait();
+      const gasUsed = receipt!.gasUsed * receipt!.gasPrice;
+
+      const balanceAfter = await ethers.provider.getBalance(player2.address);
+      expect(balanceAfter).to.equal(balanceBefore + expectedReward - gasUsed);
+      expect(await quizzdle.pendingReferralRewards(player2.address)).to.equal(0);
+    });
+
+    it("Should emit ReferralRewardCredited event", async function () {
+      const expectedReward = DEFAULT_FEE / 10n;
+      await expect(quizzdle.connect(player1).makeGuess(COLLECTION_ID, dailyCharacterId, { value: DEFAULT_FEE }))
+        .to.emit(quizzdle, "ReferralRewardCredited")
+        .withArgs(player2.address, player1.address, expectedReward);
+    });
+
+    it("Should emit ReferralRewardsClaimed event", async function () {
+      await quizzdle.connect(player1).makeGuess(COLLECTION_ID, dailyCharacterId, { value: DEFAULT_FEE });
+      const expectedReward = DEFAULT_FEE / 10n;
+      await expect(quizzdle.connect(player2).claimReferralRewards())
+        .to.emit(quizzdle, "ReferralRewardsClaimed")
+        .withArgs(player2.address, expectedReward);
+    });
+
+    it("Should revert claim when no rewards", async function () {
+      await expect(quizzdle.connect(player3).claimReferralRewards())
+        .to.be.revertedWith("No referral rewards to claim");
+    });
+
+    it("Should not credit rewards when referral contract not set", async function () {
+      // Deploy a fresh Quizzdle without referral contract
+      const QuizzdleFactory = await ethers.getContractFactory("Quizzdle");
+      const freshQuizzdle = await QuizzdleFactory.deploy();
+      await freshQuizzdle.waitForDeployment();
+      await freshQuizzdle.updateCollectionCharacterIds(COLLECTION_ID, CHARACTER_IDS);
+      await freshQuizzdle.setSalt(TEST_SALT);
+      const charId = await freshQuizzdle.getDailyCharacterId(COLLECTION_ID);
+
+      await freshQuizzdle.connect(player1).makeGuess(COLLECTION_ID, charId, { value: DEFAULT_FEE });
+      expect(await freshQuizzdle.pendingReferralRewards(player2.address)).to.equal(0);
+    });
+
+    it("Should track totalReferralEarned (never reset on claim)", async function () {
+      const wrongId = CHARACTER_IDS.find((id) => BigInt(id) !== dailyCharacterId) || 999;
+      const rewardPerGuess = DEFAULT_FEE / 10n;
+
+      // First guess
+      await quizzdle.connect(player1).makeGuess(COLLECTION_ID, wrongId, { value: DEFAULT_FEE });
+      expect(await quizzdle.totalReferralEarned(player2.address)).to.equal(rewardPerGuess);
+
+      // Second guess
+      await quizzdle.connect(player1).makeGuess(COLLECTION_ID, dailyCharacterId, { value: DEFAULT_FEE });
+      expect(await quizzdle.totalReferralEarned(player2.address)).to.equal(rewardPerGuess * 2n);
+
+      // Claim rewards
+      await quizzdle.connect(player2).claimReferralRewards();
+
+      // pendingRewards should be 0 but totalReferralEarned should remain
+      expect(await quizzdle.pendingReferralRewards(player2.address)).to.equal(0);
+      expect(await quizzdle.totalReferralEarned(player2.address)).to.equal(rewardPerGuess * 2n);
+
+      // Third guess after claim — totalReferralEarned keeps accumulating
+      await quizzdle.connect(player1).makeGuess(COLLECTION_ID, wrongId, { value: DEFAULT_FEE });
+      expect(await quizzdle.totalReferralEarned(player2.address)).to.equal(rewardPerGuess * 3n);
+      expect(await quizzdle.pendingReferralRewards(player2.address)).to.equal(rewardPerGuess);
+    });
+
+    it("Should reserve referral rewards and limit owner withdrawal", async function () {
+      await quizzdle.connect(player1).makeGuess(COLLECTION_ID, dailyCharacterId, { value: DEFAULT_FEE });
+      const referralAmount = DEFAULT_FEE / 10n;
+      const withdrawable = DEFAULT_FEE - referralAmount;
+
+      const balanceBefore = await ethers.provider.getBalance(player3.address);
+      await quizzdle.withdraw(player3.address);
+      const balanceAfter = await ethers.provider.getBalance(player3.address);
+      expect(balanceAfter).to.equal(balanceBefore + withdrawable);
+    });
+  });
 });

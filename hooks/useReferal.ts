@@ -19,6 +19,13 @@ const REFERAL_CONTRACT_ABI = parseAbi([
 ]);
 
 const REFERAL_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_REFERAL_CONTRACT_ADDRESS as `0x${string}` || "0x0000000000000000000000000000000000000000";
+const GAME_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}` || "0x0000000000000000000000000000000000000000";
+
+const REFERRAL_REWARDS_ABI = parseAbi([
+  "function pendingReferralRewards(address _user) external view returns (uint256)",
+  "function getTotalReferralEarned(address _user) external view returns (uint256)",
+  "function claimReferralRewards() external",
+]);
 
 /**
  * Hook to set a referral code
@@ -178,4 +185,89 @@ export function useIsCodeAvailable(code: string) {
   });
 
   return isAvailable as boolean | undefined;
+}
+
+/**
+ * Hook to get pending referral rewards (reads from Quizzdle contract)
+ */
+export function useReferralRewards() {
+  const { address, isConnected } = useAccount();
+
+  const enabled = !!address && isConnected && GAME_CONTRACT_ADDRESS !== "0x0000000000000000000000000000000000000000";
+
+  const { data: pendingRewards, refetch: refetchRewards } = useReadContract({
+    address: GAME_CONTRACT_ADDRESS,
+    abi: REFERRAL_REWARDS_ABI,
+    functionName: "pendingReferralRewards",
+    args: address ? [address] : undefined,
+    chainId: baseSepolia.id,
+    query: {
+      enabled,
+      staleTime: CACHE_TIME,
+      refetchOnWindowFocus: false,
+    },
+  });
+
+  const { data: totalEarned, refetch: refetchTotalEarned } = useReadContract({
+    address: GAME_CONTRACT_ADDRESS,
+    abi: REFERRAL_REWARDS_ABI,
+    functionName: "getTotalReferralEarned",
+    args: address ? [address] : undefined,
+    chainId: baseSepolia.id,
+    query: {
+      enabled,
+      staleTime: CACHE_TIME,
+      refetchOnWindowFocus: false,
+    },
+  });
+
+  return {
+    pendingRewards: pendingRewards ? BigInt(pendingRewards.toString()) : BigInt(0),
+    totalEarned: totalEarned ? BigInt(totalEarned.toString()) : BigInt(0),
+    refetchRewards: () => { refetchRewards(); refetchTotalEarned(); },
+  };
+}
+
+/**
+ * Hook to claim referral rewards (writes to Quizzdle contract)
+ */
+export function useClaimReferralRewards() {
+  const { address } = useAccount();
+  const chainId = useChainId();
+  const { switchChain } = useSwitchChain();
+  const { writeContract, data: hash, isPending, error } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
+    hash,
+  });
+
+  const claim = useCallback(async () => {
+    if (!address) {
+      throw new Error("Wallet not connected");
+    }
+
+    if (chainId !== baseSepolia.id) {
+      try {
+        await switchChain({ chainId: baseSepolia.id });
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch {
+        throw new Error("Please switch to Base Sepolia network");
+      }
+    }
+
+    return writeContract({
+      address: GAME_CONTRACT_ADDRESS,
+      abi: REFERRAL_REWARDS_ABI,
+      functionName: "claimReferralRewards",
+      chainId: baseSepolia.id,
+    });
+  }, [writeContract, address, chainId, switchChain]);
+
+  return {
+    claim,
+    hash,
+    isPending,
+    isConfirming,
+    isConfirmed,
+    error,
+  };
 }

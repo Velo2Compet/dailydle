@@ -6,7 +6,8 @@
       "Bash(npm run dev:*)",
       "Bash(timeout:*)",
       "Bash(npx tsc:*)",
-      "Bash(git check-ignore:*)"
+      "Bash(git check-ignore:*)",
+      "Bash(npx hardhat test:*)"
     ]
   }
 }
