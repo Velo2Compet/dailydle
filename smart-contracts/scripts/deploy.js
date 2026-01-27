@@ -17,7 +17,7 @@ async function main() {
   console.log("Deploying contracts with the account:", deployer.address);
   console.log("Account balance:", (await ethers.provider.getBalance(deployer.address)).toString());
 
-  const Dailydle = await ethers.getContractFactory("Dailydle");
+  const Dailydle = await ethers.getContractFactory("Quizzdle");
   const dailydle = await Dailydle.deploy();
 
   await dailydle.waitForDeployment();

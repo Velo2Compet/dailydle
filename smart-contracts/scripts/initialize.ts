@@ -22,8 +22,8 @@ async function main() {
   console.log("Initializing contract at:", contractAddress);
   console.log("Deployer:", deployer.address);
 
-  const Dailydle = await ethers.getContractFactory("Dailydle");
-  const dailydle = Dailydle.attach(contractAddress);
+  const Quizzdle = await ethers.getContractFactory("Quizzdle");
+  const dailydle = Quizzdle.attach(contractAddress);
 
   // Préparer les données pour updateMultipleCollections
   const collectionIds: number[] = [];

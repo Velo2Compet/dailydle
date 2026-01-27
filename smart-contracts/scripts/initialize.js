@@ -52,13 +52,19 @@ async function main() {
     process.exit(1);
   }
 
+  const saltDecrypt = process.env.SALT_DECRYPT;
+  if (!saltDecrypt) {
+    console.error("❌ Please set SALT_DECRYPT environment variable in .env.local");
+    process.exit(1);
+  }
+
   const [deployer] = await ethers.getSigners();
   console.log("🚀 Initializing contract at:", contractAddress);
   console.log("👤 Deployer:", deployer.address);
   console.log("🌐 Quizzdle API URL:", NEXT_PUBLIC_QUIZZDLE_API_URL);
 
-  const Dailydle = await ethers.getContractFactory("Dailydle");
-  const dailydle = Dailydle.attach(contractAddress);
+  const Quizzdle = await ethers.getContractFactory("Quizzdle");
+  const dailydle = Quizzdle.attach(contractAddress);
 
   // Récupérer toutes les catégories depuis l'API
   console.log("\n📥 Fetching categories from Quizzdle API...");
@@ -102,6 +108,21 @@ async function main() {
 
   if (collectionIds.length === 0) {
     console.error("❌ No valid categories found to register");
+    process.exit(1);
+  }
+
+  // Set salt on contract
+  console.log("\n🔑 Setting salt on contract...");
+  try {
+    // If SALT_DECRYPT is already a 0x hex bytes32, use it directly; otherwise encode as bytes32 string
+    const saltBytes = saltDecrypt.startsWith("0x") ? saltDecrypt : ethers.encodeBytes32String(saltDecrypt);
+    const saltTx = await dailydle.setSalt(saltBytes, {
+      gasPrice: (await ethers.provider.getFeeData()).gasPrice,
+    });
+    await saltTx.wait();
+    console.log(`✅ Salt set (tx: ${saltTx.hash})`);
+  } catch (error) {
+    console.error("❌ Failed to set salt:", error.message);
     process.exit(1);
   }
 

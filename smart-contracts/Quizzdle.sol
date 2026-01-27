@@ -18,6 +18,9 @@ contract Quizzdle {
     // Owner du contrat
     address public owner;
 
+    // Salt prive pour rendre le tirage imprevisible
+    bytes32 private salt;
+
     // Frais par proposition (en wei) - par defaut 0.000001 ETH = 1000000000 wei
     uint256 public feePerGuess = 1000000000; // 0.000001 ETH en wei
 
@@ -54,6 +57,7 @@ contract Quizzdle {
     );
     event FeeUpdated(uint256 newFee);
     event FundsWithdrawn(address indexed to, uint256 amount);
+    event SaltUpdated();
 
     // Modifiers
     modifier validCollection(uint256 _collectionId) {
@@ -83,7 +87,7 @@ contract Quizzdle {
     function updateCollectionCharacterIds(
         uint256 _collectionId,
         uint256[] memory _characterIds
-    ) public {
+    ) public onlyOwner {
         require(_characterIds.length > 0, "Character IDs array cannot be empty");
 
         // Creer la collection si elle n'existe pas
@@ -105,7 +109,7 @@ contract Quizzdle {
     function updateMultipleCollections(
         uint256[] memory _collectionIds,
         uint256[][] memory _characterIdsArrays
-    ) public {
+    ) public onlyOwner {
         require(_collectionIds.length == _characterIdsArrays.length, "Arrays length mismatch");
 
         for (uint256 i = 0; i < _collectionIds.length; i++) {
@@ -142,19 +146,13 @@ contract Quizzdle {
         require(msg.value >= feePerGuess, "Insufficient fee paid");
 
         // Track the fee paid
-        uint256 actualFee = feePerGuess;
-        totalPaid[msg.sender] += actualFee;
-        globalTotalPaid += actualFee;
-
-        // Si plus que les frais requis, rembourser l'excedent
-        if (msg.value > feePerGuess) {
-            payable(msg.sender).transfer(msg.value - feePerGuess);
-        }
+        totalPaid[msg.sender] += msg.value;
+        globalTotalPaid += msg.value;
 
         uint256 currentDay = block.timestamp / 86400;
 
         // Calculer le personnage du jour on-chain
-        uint256 dailyCharacterId = getDailyCharacterId(_collectionId);
+        uint256 dailyCharacterId = _getDailyCharacterId(_collectionId);
 
         // Verifier si la proposition est correcte
         isCorrect = (_characterId == dailyCharacterId);
@@ -196,31 +194,36 @@ contract Quizzdle {
     }
 
     /**
-     * @dev Calcule le personnage du jour de maniere deterministe on-chain
-     * @param _collectionId ID de la collection
-     * @return characterId ID du personnage du jour (depuis le tableau d'IDs)
+     * @dev Calcule le personnage du jour (internal, sale avec keccak256)
      */
-    function getDailyCharacterId(uint256 _collectionId)
-        public
+    function _getDailyCharacterId(uint256 _collectionId)
+        internal
         view
-        validCollection(_collectionId)
         returns (uint256)
     {
-        uint256 currentDay = block.timestamp / 86400; // Nombre de jours depuis l'epoch
-        uint256 year = (currentDay / 365) + 1970; // Approximation de l'annee
-        uint256 dayOfYear = currentDay % 365; // Approximation du jour de l'annee
-
-        // Seed deterministe : annee * 1000 + jour de l'annee + ID de la collection * 10000
-        uint256 seed = year * 1000 + dayOfYear + _collectionId * 10000;
+        uint256 currentDay = block.timestamp / 86400;
         uint256 totalCharacters = collectionCharacterIds[_collectionId].length;
 
         require(totalCharacters > 0, "Collection has no characters");
 
-        // Selectionner un index de maniere deterministe
+        uint256 seed = uint256(keccak256(abi.encodePacked(salt, currentDay, _collectionId)));
         uint256 characterIndex = seed % totalCharacters;
-
-        // Retourner l'ID du personnage depuis le tableau
         return collectionCharacterIds[_collectionId][characterIndex];
+    }
+
+    /**
+     * @dev Calcule le personnage du jour (externe, seulement owner)
+     * @param _collectionId ID de la collection
+     * @return characterId ID du personnage du jour
+     */
+    function getDailyCharacterId(uint256 _collectionId)
+        public
+        view
+        onlyOwner
+        validCollection(_collectionId)
+        returns (uint256)
+    {
+        return _getDailyCharacterId(_collectionId);
     }
 
     /**
@@ -230,11 +233,12 @@ contract Quizzdle {
     function verifyGuess(uint256 _collectionId, uint256 _characterId)
         public
         view
+        onlyOwner
         validCollection(_collectionId)
         returns (bool)
     {
         // Calculer le personnage du jour on-chain
-        uint256 dailyCharacterId = getDailyCharacterId(_collectionId);
+        uint256 dailyCharacterId = _getDailyCharacterId(_collectionId);
 
         // Verifier si le personnage devine correspond au personnage du jour
         return _characterId == dailyCharacterId;
@@ -350,6 +354,18 @@ contract Quizzdle {
         returns (uint256[] memory)
     {
         return collectionCharacterIds[_collectionId];
+    }
+
+    /**
+     * @dev Definit le salt pour le calcul du personnage du jour (seulement owner)
+     * @param _newSalt Nouveau salt (bytes32)
+     */
+    function setSalt(bytes32 _newSalt)
+        public
+        onlyOwner
+    {
+        salt = _newSalt;
+        emit SaltUpdated();
     }
 
     /**

@@ -73,6 +73,7 @@ export interface QuizzdleInterface extends Interface {
       | "owner"
       | "playerGuesses"
       | "setFee"
+      | "setSalt"
       | "totalPaid"
       | "totalWinnersCount"
       | "totalWins"
@@ -91,6 +92,7 @@ export interface QuizzdleInterface extends Interface {
       | "FeeUpdated"
       | "FundsWithdrawn"
       | "GuessMade"
+      | "SaltUpdated"
   ): EventFragment;
 
   encodeFunctionData(
@@ -182,6 +184,7 @@ export interface QuizzdleInterface extends Interface {
     functionFragment: "setFee",
     values: [BigNumberish]
   ): string;
+  encodeFunctionData(functionFragment: "setSalt", values: [BytesLike]): string;
   encodeFunctionData(
     functionFragment: "totalPaid",
     values: [AddressLike]
@@ -299,6 +302,7 @@ export interface QuizzdleInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "setFee", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "setSalt", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "totalPaid", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "totalWinnersCount",
@@ -403,6 +407,16 @@ export namespace GuessMadeEvent {
     isCorrect: boolean;
     attempts: bigint;
   }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace SaltUpdatedEvent {
+  export type InputTuple = [];
+  export type OutputTuple = [];
+  export interface OutputObject {}
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
   export type Log = TypedEventLog<Event>;
@@ -561,6 +575,8 @@ export interface Quizzdle extends BaseContract {
   >;
 
   setFee: TypedContractMethod<[_newFee: BigNumberish], [void], "nonpayable">;
+
+  setSalt: TypedContractMethod<[_newSalt: BytesLike], [void], "nonpayable">;
 
   totalPaid: TypedContractMethod<[arg0: AddressLike], [bigint], "view">;
 
@@ -726,6 +742,9 @@ export interface Quizzdle extends BaseContract {
     nameOrSignature: "setFee"
   ): TypedContractMethod<[_newFee: BigNumberish], [void], "nonpayable">;
   getFunction(
+    nameOrSignature: "setSalt"
+  ): TypedContractMethod<[_newSalt: BytesLike], [void], "nonpayable">;
+  getFunction(
     nameOrSignature: "totalPaid"
   ): TypedContractMethod<[arg0: AddressLike], [bigint], "view">;
   getFunction(
@@ -808,6 +827,13 @@ export interface Quizzdle extends BaseContract {
     GuessMadeEvent.OutputTuple,
     GuessMadeEvent.OutputObject
   >;
+  getEvent(
+    key: "SaltUpdated"
+  ): TypedContractEvent<
+    SaltUpdatedEvent.InputTuple,
+    SaltUpdatedEvent.OutputTuple,
+    SaltUpdatedEvent.OutputObject
+  >;
 
   filters: {
     "CollectionUpdated(uint256,uint256)": TypedContractEvent<
@@ -863,6 +889,17 @@ export interface Quizzdle extends BaseContract {
       GuessMadeEvent.InputTuple,
       GuessMadeEvent.OutputTuple,
       GuessMadeEvent.OutputObject
+    >;
+
+    "SaltUpdated()": TypedContractEvent<
+      SaltUpdatedEvent.InputTuple,
+      SaltUpdatedEvent.OutputTuple,
+      SaltUpdatedEvent.OutputObject
+    >;
+    SaltUpdated: TypedContractEvent<
+      SaltUpdatedEvent.InputTuple,
+      SaltUpdatedEvent.OutputTuple,
+      SaltUpdatedEvent.OutputObject
     >;
   };
 }

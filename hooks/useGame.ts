@@ -118,20 +118,21 @@ export function useGameState(collection: Collection) {
 
   const currentDay = getCurrentDay();
 
-  // Récupérer le personnage du jour depuis le contrat (calculé on-chain)
-  const { data: dailyCharacterId } = useReadContract({
-    address: CONTRACT_ADDRESS,
-    abi: CONTRACT_ABI,
-    functionName: "getDailyCharacterId",
-    args: [BigInt(collection.id)],
-    chainId: baseSepolia.id, // Forcer Base
-    query: {
-      enabled: !!collection.id,
-      staleTime: CACHE_TIME,
-      refetchOnWindowFocus: false,
-      refetchOnMount: false,
-    },
-  });
+  // Récupérer le personnage du jour depuis l'API server-side (salt-based)
+  const [dailyCharacterId, setDailyCharacterId] = useState<bigint | null>(null);
+
+  useEffect(() => {
+    if (!collection.id) return;
+
+    fetch(`/api/daily-character?collectionId=${collection.id}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.dailyCharacterId) {
+          setDailyCharacterId(BigInt(data.dailyCharacterId));
+        }
+      })
+      .catch((err) => console.error("Failed to fetch daily character:", err));
+  }, [collection.id]);
 
   // Récupérer le nombre de tentatives
   const { data: attempts, refetch: refetchAttempts } = useReadContract({

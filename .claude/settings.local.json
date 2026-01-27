@@ -5,7 +5,8 @@
       "WebFetch(domain:quizzdle.fr)",
       "Bash(npm run dev:*)",
       "Bash(timeout:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(git check-ignore:*)"
     ]
   }
 }

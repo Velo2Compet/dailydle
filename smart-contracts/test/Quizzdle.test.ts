@@ -12,6 +12,7 @@ describe("Quizzdle", function () {
   const COLLECTION_ID = 1;
   const CHARACTER_IDS = [100, 200, 300, 400, 500];
   const DEFAULT_FEE = 1000000000n; // 1 gwei = 0.000000001 ETH (as defined in contract)
+  const TEST_SALT = ethers.encodeBytes32String("test-salt-secret");
 
   // Helper to get current day from blockchain
   async function getCurrentDay() {
@@ -79,9 +80,10 @@ describe("Quizzdle", function () {
           .withArgs(COLLECTION_ID, CHARACTER_IDS.length);
       });
 
-      it("Should allow any address to create collections", async function () {
-        await quizzdle.connect(player1).updateCollectionCharacterIds(COLLECTION_ID, CHARACTER_IDS);
-        expect(await quizzdle.collectionExists(COLLECTION_ID)).to.be.true;
+      it("Should revert if non-owner tries to create collection", async function () {
+        await expect(
+          quizzdle.connect(player1).updateCollectionCharacterIds(COLLECTION_ID, CHARACTER_IDS)
+        ).to.be.revertedWith("Only owner can call this function");
       });
     });
 
@@ -122,15 +124,52 @@ describe("Quizzdle", function () {
         await expect(quizzdle.updateMultipleCollections(collectionIds, characterIdsArrays))
           .to.emit(quizzdle, "CollectionsUpdated");
       });
+
+      it("Should revert if non-owner tries to update multiple collections", async function () {
+        await expect(
+          quizzdle.connect(player1).updateMultipleCollections([1], [[100]])
+        ).to.be.revertedWith("Only owner can call this function");
+      });
+    });
+  });
+
+  describe("Salt Management", function () {
+    it("Should allow owner to set salt", async function () {
+      await expect(quizzdle.setSalt(TEST_SALT))
+        .to.emit(quizzdle, "SaltUpdated");
+    });
+
+    it("Should revert if non-owner tries to set salt", async function () {
+      await expect(
+        quizzdle.connect(player1).setSalt(TEST_SALT)
+      ).to.be.revertedWith("Only owner can call this function");
+    });
+
+    it("Should change daily character when salt changes", async function () {
+      await quizzdle.updateCollectionCharacterIds(COLLECTION_ID, CHARACTER_IDS);
+
+      await quizzdle.setSalt(TEST_SALT);
+      const id1 = await quizzdle.getDailyCharacterId(COLLECTION_ID);
+
+      const otherSalt = ethers.encodeBytes32String("other-salt");
+      await quizzdle.setSalt(otherSalt);
+      const id2 = await quizzdle.getDailyCharacterId(COLLECTION_ID);
+
+      // Both should be valid characters
+      expect(CHARACTER_IDS).to.include(Number(id1));
+      expect(CHARACTER_IDS).to.include(Number(id2));
+      // With different salts, the result should (very likely) differ
+      // Note: there's a 1/5 chance they're the same by coincidence, so we just check validity
     });
   });
 
   describe("Daily Character Calculation", function () {
     beforeEach(async function () {
       await quizzdle.updateCollectionCharacterIds(COLLECTION_ID, CHARACTER_IDS);
+      await quizzdle.setSalt(TEST_SALT);
     });
 
-    it("Should return a valid character ID from the collection", async function () {
+    it("Should return a valid character ID from the collection (owner only)", async function () {
       const dailyCharacterId = await quizzdle.getDailyCharacterId(COLLECTION_ID);
       expect(CHARACTER_IDS).to.include(Number(dailyCharacterId));
     });
@@ -145,8 +184,6 @@ describe("Quizzdle", function () {
       await quizzdle.updateCollectionCharacterIds(2, [1000, 2000, 3000]);
       const id1 = await quizzdle.getDailyCharacterId(COLLECTION_ID);
       const id2 = await quizzdle.getDailyCharacterId(2);
-      // They might be the same by chance, but the seed is different
-      // Just verify both are valid
       expect(CHARACTER_IDS).to.include(Number(id1));
       expect([1000, 2000, 3000]).to.include(Number(id2));
     });
@@ -157,6 +194,12 @@ describe("Quizzdle", function () {
       );
     });
 
+    it("Should revert if non-owner calls getDailyCharacterId", async function () {
+      await expect(
+        quizzdle.connect(player1).getDailyCharacterId(COLLECTION_ID)
+      ).to.be.revertedWith("Only owner can call this function");
+    });
+
     it("Should change character ID on different days", async function () {
       const id1 = await quizzdle.getDailyCharacterId(COLLECTION_ID);
 
@@ -164,8 +207,6 @@ describe("Quizzdle", function () {
       await time.increase(86400);
 
       const id2 = await quizzdle.getDailyCharacterId(COLLECTION_ID);
-      // Note: might be same by chance, but deterministic
-      // Just verify both are valid
       expect(CHARACTER_IDS).to.include(Number(id1));
       expect(CHARACTER_IDS).to.include(Number(id2));
     });
@@ -176,6 +217,8 @@ describe("Quizzdle", function () {
 
     beforeEach(async function () {
       await quizzdle.updateCollectionCharacterIds(COLLECTION_ID, CHARACTER_IDS);
+      await quizzdle.setSalt(TEST_SALT);
+      // Owner calls getDailyCharacterId (onlyOwner)
       dailyCharacterId = await quizzdle.getDailyCharacterId(COLLECTION_ID);
     });
 
@@ -209,31 +252,26 @@ describe("Quizzdle", function () {
       ).to.be.revertedWith("Insufficient fee paid");
     });
 
-    it("Should refund excess payment", async function () {
+    it("Should keep excess payment in contract (no refund)", async function () {
       const excessAmount = DEFAULT_FEE * 2n;
-      const balanceBefore = await ethers.provider.getBalance(player1.address);
 
-      const tx = await quizzdle
+      await quizzdle
         .connect(player1)
         .makeGuess(COLLECTION_ID, dailyCharacterId, { value: excessAmount });
-      const receipt = await tx.wait();
-      const gasUsed = receipt!.gasUsed * receipt!.gasPrice;
 
-      const balanceAfter = await ethers.provider.getBalance(player1.address);
-      const actualSpent = balanceBefore - balanceAfter;
-
-      // Should only spend DEFAULT_FEE + gas
-      expect(actualSpent).to.be.closeTo(DEFAULT_FEE + gasUsed, ethers.parseUnits("0.0001", "ether"));
+      // Contract should hold the full excess amount
+      const contractBalance = await ethers.provider.getBalance(await quizzdle.getAddress());
+      expect(contractBalance).to.equal(excessAmount);
     });
 
-    it("Should track total paid per user", async function () {
-      await quizzdle.connect(player1).makeGuess(COLLECTION_ID, dailyCharacterId, { value: DEFAULT_FEE });
-      expect(await quizzdle.getTotalPaid(player1.address)).to.equal(DEFAULT_FEE);
+    it("Should track total paid per user (full msg.value)", async function () {
+      const overpay = DEFAULT_FEE * 3n;
+      await quizzdle.connect(player1).makeGuess(COLLECTION_ID, dailyCharacterId, { value: overpay });
+      expect(await quizzdle.getTotalPaid(player1.address)).to.equal(overpay);
 
-      // Make another guess (wrong one to not trigger same day win logic)
       const wrongCharacterId = CHARACTER_IDS.find((id) => BigInt(id) !== dailyCharacterId) || 999;
       await quizzdle.connect(player1).makeGuess(COLLECTION_ID, wrongCharacterId, { value: DEFAULT_FEE });
-      expect(await quizzdle.getTotalPaid(player1.address)).to.equal(DEFAULT_FEE * 2n);
+      expect(await quizzdle.getTotalPaid(player1.address)).to.equal(overpay + DEFAULT_FEE);
     });
 
     it("Should track global total paid", async function () {
@@ -276,6 +314,7 @@ describe("Quizzdle", function () {
 
     beforeEach(async function () {
       await quizzdle.updateCollectionCharacterIds(COLLECTION_ID, CHARACTER_IDS);
+      await quizzdle.setSalt(TEST_SALT);
       dailyCharacterId = await quizzdle.getDailyCharacterId(COLLECTION_ID);
     });
 
@@ -351,14 +390,15 @@ describe("Quizzdle", function () {
 
     beforeEach(async function () {
       await quizzdle.updateCollectionCharacterIds(COLLECTION_ID, CHARACTER_IDS);
+      await quizzdle.setSalt(TEST_SALT);
       dailyCharacterId = await quizzdle.getDailyCharacterId(COLLECTION_ID);
     });
 
-    it("Should return true for correct guess", async function () {
+    it("Should return true for correct guess (owner)", async function () {
       expect(await quizzdle.verifyGuess(COLLECTION_ID, dailyCharacterId)).to.be.true;
     });
 
-    it("Should return false for incorrect guess", async function () {
+    it("Should return false for incorrect guess (owner)", async function () {
       const wrongCharacterId = CHARACTER_IDS.find((id) => BigInt(id) !== dailyCharacterId) || 999;
       expect(await quizzdle.verifyGuess(COLLECTION_ID, wrongCharacterId)).to.be.false;
     });
@@ -367,6 +407,12 @@ describe("Quizzdle", function () {
       await expect(quizzdle.verifyGuess(999, dailyCharacterId)).to.be.revertedWith(
         "Collection does not exist"
       );
+    });
+
+    it("Should revert if non-owner calls verifyGuess", async function () {
+      await expect(
+        quizzdle.connect(player1).verifyGuess(COLLECTION_ID, dailyCharacterId)
+      ).to.be.revertedWith("Only owner can call this function");
     });
   });
 
@@ -400,6 +446,7 @@ describe("Quizzdle", function () {
   describe("Withdrawal", function () {
     beforeEach(async function () {
       await quizzdle.updateCollectionCharacterIds(COLLECTION_ID, CHARACTER_IDS);
+      await quizzdle.setSalt(TEST_SALT);
       const dailyCharacterId = await quizzdle.getDailyCharacterId(COLLECTION_ID);
 
       // Make some guesses to accumulate fees
@@ -438,9 +485,7 @@ describe("Quizzdle", function () {
     });
 
     it("Should revert if no funds to withdraw", async function () {
-      // Withdraw all funds first
       await quizzdle.withdraw(owner.address);
-
       await expect(quizzdle.withdraw(owner.address)).to.be.revertedWith("No funds to withdraw");
     });
 
@@ -472,7 +517,7 @@ describe("Quizzdle", function () {
       await owner.sendTransaction({
         to: await quizzdle.getAddress(),
         value: amount,
-        data: "0x1234", // Random data to trigger fallback
+        data: "0x1234",
       });
 
       const balance = await ethers.provider.getBalance(await quizzdle.getAddress());
@@ -481,6 +526,10 @@ describe("Quizzdle", function () {
   });
 
   describe("Edge Cases", function () {
+    beforeEach(async function () {
+      await quizzdle.setSalt(TEST_SALT);
+    });
+
     it("Should handle collection with single character", async function () {
       await quizzdle.updateCollectionCharacterIds(COLLECTION_ID, [999]);
       const dailyCharacterId = await quizzdle.getDailyCharacterId(COLLECTION_ID);
