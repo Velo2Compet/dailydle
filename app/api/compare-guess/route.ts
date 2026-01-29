@@ -12,6 +12,7 @@ const RPC_URL = process.env.BASE_SEPOLIA_RPC_URL || "https://sepolia.base.org";
 
 const abi = parseAbi([
   "function getCollectionCharacterIds(uint256 _collectionId) external view returns (uint256[])",
+  "function getPlayerGuesses(address _player, uint256 _collectionId) external view returns ((address player, uint256 collectionId, uint256 characterId, uint256 timestamp, bool isCorrect)[])",
 ]);
 
 const client = createPublicClient({
@@ -90,18 +91,23 @@ function compareAttributesSecure(
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { collectionId, guessedCharacterId, guessedCharacterIds } = body;
+    const { collectionId, guessedCharacterIds, playerAddress } = body;
 
-    // Support both single guess and batch of guesses
+    // SECURITY: playerAddress is REQUIRED to verify on-chain guesses
+    if (!playerAddress || typeof playerAddress !== "string" || !playerAddress.startsWith("0x")) {
+      return NextResponse.json(
+        { error: "Missing or invalid playerAddress - must be a valid wallet address" },
+        { status: 400 }
+      );
+    }
+
     const guessIds: number[] = guessedCharacterIds
       ? guessedCharacterIds.map((id: number | string) => Number(id))
-      : guessedCharacterId !== undefined
-        ? [Number(guessedCharacterId)]
-        : [];
+      : [];
 
     if (!collectionId || guessIds.length === 0) {
       return NextResponse.json(
-        { error: "Missing collectionId or guessedCharacterId(s)" },
+        { error: "Missing collectionId or guessedCharacterIds" },
         { status: 400 }
       );
     }
@@ -110,7 +116,45 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
     }
 
-    // 1. Get collection data from Quizzdle API
+    // 1. SECURITY: Verify on-chain that this player has actually made these guesses
+    // This prevents spam - you MUST pay for makeGuess() before getting comparisons
+    const onChainGuesses = await client.readContract({
+      address: CONTRACT_ADDRESS,
+      abi,
+      functionName: "getPlayerGuesses",
+      args: [playerAddress as `0x${string}`, BigInt(collectionId)],
+    });
+
+    // Calculate current day for filtering today's guesses
+    const currentDay = Math.floor(Date.now() / 1000 / 86400);
+
+    // Type for on-chain guess structure
+    type OnChainGuess = {
+      player: string;
+      collectionId: bigint;
+      characterId: bigint;
+      timestamp: bigint;
+      isCorrect: boolean;
+    };
+
+    // Filter to today's guesses only and extract character IDs
+    const todayOnChainGuessIds = new Set(
+      (onChainGuesses as readonly OnChainGuess[])
+        .filter((g) => Math.floor(Number(g.timestamp) / 86400) === currentDay)
+        .map((g) => Number(g.characterId))
+    );
+
+    // SECURITY: Only return comparisons for guesses that exist on-chain
+    const verifiedGuessIds = guessIds.filter((id) => todayOnChainGuessIds.has(id));
+
+    if (verifiedGuessIds.length === 0) {
+      return NextResponse.json(
+        { error: "No verified on-chain guesses found. You must call makeGuess() first." },
+        { status: 403 }
+      );
+    }
+
+    // 2. Get collection data from Quizzdle API
     const rawCategory = await fetchCategoryById(collectionId);
     const collection = quizzdleCategoryToCollection(rawCategory);
 
@@ -118,7 +162,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Collection has no characters" }, { status: 404 });
     }
 
-    // 2. Get character IDs from contract (to match on-chain logic)
+    // 3. Get character IDs from contract (to match on-chain logic)
     const onChainCharacterIds = await client.readContract({
       address: CONTRACT_ADDRESS,
       abi,
@@ -130,25 +174,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Collection not registered on-chain" }, { status: 404 });
     }
 
-    // 3. Calculate daily character using the same logic as on-chain
-    const currentDay = BigInt(Math.floor(Date.now() / 1000 / 86400));
+    // 4. Calculate daily character using the same logic as on-chain
+    const currentDayBigInt = BigInt(currentDay);
     const packed = encodePacked(
       ["bytes32", "uint256", "uint256"],
-      [SALT, currentDay, BigInt(collectionId)]
+      [SALT, currentDayBigInt, BigInt(collectionId)]
     );
     const seed = BigInt(keccak256(packed));
     const characterIndex = Number(seed % BigInt(onChainCharacterIds.length));
     const dailyCharacterId = Number(onChainCharacterIds[characterIndex]);
 
-    // 4. Find daily character in the collection
+    // 5. Find daily character in the collection
     const dailyCharacter = collection.characters.find((c) => c.id === dailyCharacterId);
 
     if (!dailyCharacter) {
       return NextResponse.json({ error: "Daily character not found in collection" }, { status: 500 });
     }
 
-    // 5. Process all guesses
-    const results = guessIds.map((guessId) => {
+    // 6. Process ONLY verified guesses (those that exist on-chain)
+    const results = verifiedGuessIds.map((guessId) => {
       const guessedCharacter = collection.characters!.find((c) => c.id === guessId);
 
       if (!guessedCharacter) {
@@ -199,11 +243,6 @@ export async function POST(request: NextRequest) {
 
       return result;
     });
-
-    // If single guess was requested, return single result for backwards compatibility
-    if (!body.guessedCharacterIds && body.guessedCharacterId !== undefined) {
-      return NextResponse.json(results[0]);
-    }
 
     return NextResponse.json({ results });
   } catch (error) {

@@ -189,13 +189,15 @@ export function useGameState(collection: Collection) {
     // Extraire les IDs des personnages devinés
     const guessedCharacterIds = todayGuessesRaw.map((g) => Number(g.characterId));
 
-    // Appeler l'API sécurisée pour obtenir les comparaisons
+    // SECURITY: Pass player address for on-chain verification
+    // The API will verify these guesses exist on-chain before returning comparisons
     fetch("/api/compare-guess", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         collectionId: collection.id,
         guessedCharacterIds,
+        playerAddress: address,
       }),
     })
       .then((res) => res.json())
@@ -263,7 +265,7 @@ export function useGameState(collection: Collection) {
       .catch((err) => {
         console.error("Failed to compare guesses:", err);
       });
-  }, [playerGuesses, collection.id, currentDay]);
+  }, [playerGuesses, collection.id, currentDay, address]);
 
   return {
     ...gameState,
