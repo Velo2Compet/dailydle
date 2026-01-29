@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { keccak256, encodePacked, createPublicClient, http, parseAbi } from "viem";
+import { keccak256, encodePacked, createPublicClient, http, parseAbi, verifyMessage } from "viem";
 import { baseSepolia } from "viem/chains";
 import { fetchCategoryById } from "@/lib/quizzdle-api";
 import { quizzdleCategoryToCollection } from "@/utils/quizzdle-transform";
 import { normalizeCharacter } from "@/utils/game";
 import type { AttributeComparison, Character } from "@/types/game";
+
+// Signature validity window (5 minutes)
+const SIGNATURE_VALIDITY_MS = 5 * 60 * 1000;
 
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}`;
 const SALT = process.env.SALT_DECRYPT as `0x${string}`;
@@ -91,13 +94,54 @@ function compareAttributesSecure(
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { collectionId, guessedCharacterIds, playerAddress } = body;
+    const { collectionId, guessedCharacterIds, playerAddress, signature, signatureTimestamp } = body;
 
     // SECURITY: playerAddress is REQUIRED to verify on-chain guesses
     if (!playerAddress || typeof playerAddress !== "string" || !playerAddress.startsWith("0x")) {
       return NextResponse.json(
         { error: "Missing or invalid playerAddress - must be a valid wallet address" },
         { status: 400 }
+      );
+    }
+
+    // SECURITY: Signature is REQUIRED to prove wallet ownership
+    // This prevents attackers from using other players' addresses
+    if (!signature || !signatureTimestamp) {
+      return NextResponse.json(
+        { error: "Missing signature - you must sign to prove wallet ownership" },
+        { status: 401 }
+      );
+    }
+
+    // Verify signature timestamp is recent (prevents replay attacks)
+    const timestampAge = Date.now() - signatureTimestamp;
+    if (timestampAge > SIGNATURE_VALIDITY_MS || timestampAge < 0) {
+      return NextResponse.json(
+        { error: "Signature expired - please sign again" },
+        { status: 401 }
+      );
+    }
+
+    // Verify the signature matches the claimed address
+    const message = `Dailydle: Verify wallet ownership\nCollection: ${collectionId}\nTimestamp: ${signatureTimestamp}`;
+
+    try {
+      const isValid = await verifyMessage({
+        address: playerAddress as `0x${string}`,
+        message,
+        signature: signature as `0x${string}`,
+      });
+
+      if (!isValid) {
+        return NextResponse.json(
+          { error: "Invalid signature - wallet verification failed" },
+          { status: 401 }
+        );
+      }
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid signature format" },
+        { status: 401 }
       );
     }
 
@@ -118,6 +162,7 @@ export async function POST(request: NextRequest) {
 
     // 1. SECURITY: Verify on-chain that this player has actually made these guesses
     // This prevents spam - you MUST pay for makeGuess() before getting comparisons
+    // Using recoveredAddress from signature verification (not the raw playerAddress)
     const onChainGuesses = await client.readContract({
       address: CONTRACT_ADDRESS,
       abi,

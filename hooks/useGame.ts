@@ -1,10 +1,14 @@
 "use client";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useChainId, useSwitchChain } from "wagmi";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useChainId, useSwitchChain, useSignMessage } from "wagmi";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { parseAbi } from "viem";
 import { baseSepolia } from "wagmi/chains";
 import { GameState, GuessResult, Character, Collection, AttributeComparison } from "@/types/game";
 import { getCurrentDay } from "@/utils/game";
+
+// Signature cache - stored per collection to avoid re-signing
+const signatureCache = new Map<string, { signature: string; timestamp: number }>();
+const SIGNATURE_VALIDITY_MS = 4 * 60 * 1000; // 4 minutes (slightly less than server's 5 min)
 
 // Cache settings to reduce RPC calls and avoid rate limiting
 const CACHE_TIME = 5 * 60 * 1000; // 5 minutes staleTime
@@ -102,9 +106,11 @@ export function useMakeGuess() {
 /**
  * Hook pour récupérer l'état du jeu
  * Sécurisé : le personnage du jour n'est JAMAIS exposé au client avant victoire
+ * Requires wallet signature to prove ownership
  */
 export function useGameState(collection: Collection) {
   const { address } = useAccount();
+  const { signMessageAsync } = useSignMessage();
   const [gameState, setGameState] = useState<GameState>({
     collectionId: collection.id,
     dailyCharacter: null,
@@ -115,9 +121,41 @@ export function useGameState(collection: Collection) {
     isGameOver: false,
     isGameWon: false,
   });
+  const [isSigningRequired, setIsSigningRequired] = useState(false);
 
   const currentDay = getCurrentDay();
   const lastProcessedGuessesRef = useRef<string>("");
+
+  // Get or request signature for API authentication
+  const getSignature = useCallback(async (): Promise<{ signature: string; timestamp: number } | null> => {
+    if (!address) return null;
+
+    const cacheKey = `${address}-${collection.id}`;
+    const cached = signatureCache.get(cacheKey);
+
+    // Return cached signature if still valid
+    if (cached && Date.now() - cached.timestamp < SIGNATURE_VALIDITY_MS) {
+      return cached;
+    }
+
+    // Request new signature
+    try {
+      setIsSigningRequired(true);
+      const timestamp = Date.now();
+      const message = `Dailydle: Verify wallet ownership\nCollection: ${collection.id}\nTimestamp: ${timestamp}`;
+
+      const signature = await signMessageAsync({ message });
+
+      const result = { signature, timestamp };
+      signatureCache.set(cacheKey, result);
+      setIsSigningRequired(false);
+      return result;
+    } catch (error) {
+      console.error("Failed to sign message:", error);
+      setIsSigningRequired(false);
+      return null;
+    }
+  }, [address, collection.id, signMessageAsync]);
 
   // Récupérer le nombre de tentatives
   const { data: attempts, refetch: refetchAttempts } = useReadContract({
@@ -189,83 +227,101 @@ export function useGameState(collection: Collection) {
     // Extraire les IDs des personnages devinés
     const guessedCharacterIds = todayGuessesRaw.map((g) => Number(g.characterId));
 
-    // SECURITY: Pass player address for on-chain verification
-    // The API will verify these guesses exist on-chain before returning comparisons
-    fetch("/api/compare-guess", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        collectionId: collection.id,
-        guessedCharacterIds,
-        playerAddress: address,
-      }),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.error) {
+    // SECURITY: Get signature to prove wallet ownership
+    // This prevents attackers from using other players' addresses
+    const fetchWithSignature = async () => {
+      const signatureData = await getSignature();
+      if (!signatureData) {
+        console.error("Failed to get signature for API call");
+        return;
+      }
+
+      const response = await fetch("/api/compare-guess", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          collectionId: collection.id,
+          guessedCharacterIds,
+          playerAddress: address,
+          signature: signatureData.signature,
+          signatureTimestamp: signatureData.timestamp,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.error) {
+        // If signature expired, clear cache and retry
+        if (response.status === 401) {
+          const cacheKey = `${address}-${collection.id}`;
+          signatureCache.delete(cacheKey);
+          console.error("Signature expired, please try again");
+        } else {
           console.error("compare-guess error:", data.error);
-          return;
         }
+        return;
+      }
 
-        lastProcessedGuessesRef.current = guessKey;
+      lastProcessedGuessesRef.current = guessKey;
 
-        const results = data.results || [];
+      const results = data.results || [];
 
-        // Mapper les résultats aux guesses
-        const processedGuesses: GuessResult[] = todayGuessesRaw.map((g, index) => {
-          const result = results[index];
-          if (!result || result.error) {
-            return {
-              isCorrect: g.isCorrect,
-              attempts: Number(g.characterId),
-              characterId: Number(g.characterId),
-              characterName: `Character #${g.characterId}`,
-              characterImage: undefined,
-              comparisons: [],
-              timestamp: Number(g.timestamp),
-            };
-          }
-
+      // Mapper les résultats aux guesses
+      const processedGuesses: GuessResult[] = todayGuessesRaw.map((g, index) => {
+        const result = results[index];
+        if (!result || result.error) {
           return {
-            isCorrect: result.isCorrect,
-            attempts: result.guessedCharacter.id,
-            characterId: result.guessedCharacter.id,
-            characterName: result.guessedCharacter.name,
-            characterImage: result.guessedCharacter.imageUrl,
-            comparisons: result.comparisons as AttributeComparison[],
+            isCorrect: g.isCorrect,
+            attempts: Number(g.characterId),
+            characterId: Number(g.characterId),
+            characterName: `Character #${g.characterId}`,
+            characterImage: undefined,
+            comparisons: [],
             timestamp: Number(g.timestamp),
           };
-        });
-
-        const isWon = processedGuesses.some((g) => g.isCorrect);
-
-        // Récupérer le personnage du jour UNIQUEMENT si le joueur a gagné
-        let dailyChar: Character | null = null;
-        if (isWon) {
-          const winningGuess = results.find((r: any) => r.isCorrect && r.dailyCharacter);
-          if (winningGuess?.dailyCharacter) {
-            dailyChar = {
-              id: winningGuess.dailyCharacter.id,
-              name: winningGuess.dailyCharacter.name,
-              imageUrl: winningGuess.dailyCharacter.imageUrl,
-              attributes: {},
-            };
-          }
         }
 
-        setGameState((prev) => ({
-          ...prev,
-          guesses: processedGuesses,
-          isGameWon: isWon,
-          isGameOver: isWon,
-          dailyCharacter: dailyChar,
-          dailyCharacterHash: "",
-        }));
-      })
-      .catch((err) => {
-        console.error("Failed to compare guesses:", err);
+        return {
+          isCorrect: result.isCorrect,
+          attempts: result.guessedCharacter.id,
+          characterId: result.guessedCharacter.id,
+          characterName: result.guessedCharacter.name,
+          characterImage: result.guessedCharacter.imageUrl,
+          comparisons: result.comparisons as AttributeComparison[],
+          timestamp: Number(g.timestamp),
+        };
       });
-  }, [playerGuesses, collection.id, currentDay, address]);
+
+      const isWon = processedGuesses.some((g) => g.isCorrect);
+
+      // Récupérer le personnage du jour UNIQUEMENT si le joueur a gagné
+      let dailyChar: Character | null = null;
+      if (isWon) {
+        const winningGuess = results.find((r: { isCorrect: boolean; dailyCharacter?: { id: number; name: string; imageUrl?: string } }) => r.isCorrect && r.dailyCharacter);
+        if (winningGuess?.dailyCharacter) {
+          dailyChar = {
+            id: winningGuess.dailyCharacter.id,
+            name: winningGuess.dailyCharacter.name,
+            imageUrl: winningGuess.dailyCharacter.imageUrl,
+            attributes: {},
+          };
+        }
+      }
+
+      setGameState((prev) => ({
+        ...prev,
+        guesses: processedGuesses,
+        isGameWon: isWon,
+        isGameOver: isWon,
+        dailyCharacter: dailyChar,
+        dailyCharacterHash: "",
+      }));
+    };
+
+    fetchWithSignature().catch((err) => {
+      console.error("Failed to compare guesses:", err);
+    });
+  }, [playerGuesses, collection.id, currentDay, address, getSignature]);
 
   return {
     ...gameState,
