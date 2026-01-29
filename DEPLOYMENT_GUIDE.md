@@ -107,6 +107,11 @@ npm run deploy:base-sepolia
 npm run deploy:base
 ```
 
+### Déploy all
+```bash
+npx hardhat run smart-contracts/scripts/deploy-all.ts --network base-sepolia
+```
+
 ### Initialiser les collections
 ```bash
 npx hardhat run smart-contracts/scripts/initialize.ts --network base-sepolia

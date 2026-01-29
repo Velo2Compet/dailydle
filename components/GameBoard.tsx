@@ -8,6 +8,7 @@ import { StatsHeader } from "./StatsHeader";
 import { GameFooter } from "./GameFooter";
 import { WalletButton } from "./WalletButton";
 import { Button } from "./Button";
+import { VictoryAnimation } from "./VictoryAnimation";
 import { useMakeGuess, useGameState, useCollectionStats } from "@/hooks/useGame";
 import { useReadContract } from "wagmi";
 import { formatAttributeValue } from "@/utils/game";
@@ -172,6 +173,18 @@ export function GameBoard({ collection }: GameBoardProps) {
   };
   const refetchGameState = gameStateResult.refetch;
   const collectionStats = useCollectionStats(collection.id);
+
+  // DEBUG: Log daily character for testing
+  useEffect(() => {
+    if (gameState.dailyCharacter) {
+      console.log("🎯 DAILY CHARACTER (for testing):", {
+        id: gameState.dailyCharacter.id,
+        name: gameState.dailyCharacter.name,
+        collectionId: collection.id,
+        collectionName: collection.name,
+      });
+    }
+  }, [gameState.dailyCharacter, collection.id, collection.name]);
 
   // Vérifier que la collection existe dans le contrat
   const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}` || "0x0000000000000000000000000000000000000000";
@@ -476,14 +489,10 @@ export function GameBoard({ collection }: GameBoardProps) {
 
         {/* Message de victoire */}
         {gameState.isGameWon && (
-          <div className="w-full relative bg-gradient-to-r from-[#121217] via-[#1a1a2e] to-[#121217] border border-violet-500/20 rounded-2xl shadow-xl shadow-violet-500/10 p-4 sm:p-6">
-            <div className="text-center">
-              <h2 className="text-2xl font-bold text-white mb-2">🎉 Congratulations!</h2>
-              <p className="text-muted-foreground">
-                You found the character in {gameState.attempts} attempt(s)!
-              </p>
-            </div>
-          </div>
+          <VictoryAnimation
+            characterName={gameState.guesses.find(g => g.isCorrect)?.characterName || "the character"}
+            attempts={gameState.attempts}
+          />
         )}
 
         {/* Zone de jeu */}

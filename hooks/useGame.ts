@@ -1,11 +1,10 @@
 "use client";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useChainId, useSwitchChain } from "wagmi";
-import { useState, useEffect, useCallback } from "react";
-// Note: useCallback still needed for refetch
+import { useState, useEffect, useCallback, useRef } from "react";
 import { parseAbi } from "viem";
 import { baseSepolia } from "wagmi/chains";
-import { GameState, GuessResult, Character, Collection } from "@/types/game";
-import { getDailyCharacter, hashCharacter, compareAttributes, getCurrentDay } from "@/utils/game";
+import { GameState, GuessResult, Character, Collection, AttributeComparison } from "@/types/game";
+import { getCurrentDay } from "@/utils/game";
 
 // Cache settings to reduce RPC calls and avoid rate limiting
 const CACHE_TIME = 5 * 60 * 1000; // 5 minutes staleTime
@@ -102,6 +101,7 @@ export function useMakeGuess() {
 
 /**
  * Hook pour récupérer l'état du jeu
+ * Sécurisé : le personnage du jour n'est JAMAIS exposé au client avant victoire
  */
 export function useGameState(collection: Collection) {
   const { address } = useAccount();
@@ -110,29 +110,14 @@ export function useGameState(collection: Collection) {
     dailyCharacter: null,
     dailyCharacterHash: "",
     attempts: 0,
-    maxAttempts: 0, // Plus de limite
+    maxAttempts: 0,
     guesses: [],
     isGameOver: false,
     isGameWon: false,
   });
 
   const currentDay = getCurrentDay();
-
-  // Récupérer le personnage du jour depuis l'API server-side (salt-based)
-  const [dailyCharacterId, setDailyCharacterId] = useState<bigint | null>(null);
-
-  useEffect(() => {
-    if (!collection.id) return;
-
-    fetch(`/api/daily-character?collectionId=${collection.id}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.dailyCharacterId) {
-          setDailyCharacterId(BigInt(data.dailyCharacterId));
-        }
-      })
-      .catch((err) => console.error("Failed to fetch daily character:", err));
-  }, [collection.id]);
+  const lastProcessedGuessesRef = useRef<string>("");
 
   // Récupérer le nombre de tentatives
   const { data: attempts, refetch: refetchAttempts } = useReadContract({
@@ -140,10 +125,10 @@ export function useGameState(collection: Collection) {
     abi: CONTRACT_ABI,
     functionName: "getAttempts",
     args: address ? [address as `0x${string}`, BigInt(collection.id), BigInt(currentDay)] : undefined,
-    chainId: baseSepolia.id, // Forcer Base
+    chainId: baseSepolia.id,
     query: {
       enabled: !!address,
-      staleTime: 30 * 1000, // 30 seconds for attempts (more dynamic)
+      staleTime: 30 * 1000,
       refetchInterval: false,
       refetchOnWindowFocus: false,
     },
@@ -155,37 +140,28 @@ export function useGameState(collection: Collection) {
     abi: CONTRACT_ABI,
     functionName: "getPlayerGuesses",
     args: address ? [address as `0x${string}`, BigInt(collection.id)] : undefined,
-    chainId: baseSepolia.id, // Forcer Base
+    chainId: baseSepolia.id,
     query: {
       enabled: !!address,
-      staleTime: 30 * 1000, // 30 seconds for guesses (more dynamic)
+      staleTime: 30 * 1000,
       refetchInterval: false,
       refetchOnWindowFocus: false,
     },
   });
 
-  // Mettre à jour l'état avec les données on-chain
-  // Le nombre de tentatives vient directement du contrat (getAttempts)
+  // Mettre à jour le nombre de tentatives
   useEffect(() => {
     if (attempts !== undefined) {
       setGameState((prev) => ({
         ...prev,
-        attempts: Number(attempts), // Compteur on-chain pour ce jour et cette collection
-        // Plus de limite de tentatives, isGameOver sera true uniquement si le joueur a gagné
+        attempts: Number(attempts),
       }));
     }
   }, [attempts]);
 
-  // Traiter les propositions précédentes
-  // Les personnages sont maintenant chargés côté serveur via ?q=all
+  // Traiter les propositions via l'API sécurisée (comparaisons calculées côté serveur)
   useEffect(() => {
-    if (!playerGuesses || !dailyCharacterId) return;
-
-    // Récupérer le personnage du jour depuis la collection locale
-    const dailyCharId = Number(dailyCharacterId);
-    const dailyChar = collection.characters?.find((c) => c.id === dailyCharId) || null;
-
-    console.log("Daily character:", dailyChar?.name || "NOT FOUND", "ID:", dailyCharId);
+    if (!playerGuesses || !collection.id) return;
 
     // Filtrer les guesses d'aujourd'hui
     const todayGuessesRaw = (playerGuesses as any[]).filter((g) => {
@@ -193,46 +169,106 @@ export function useGameState(collection: Collection) {
       return guessDay === currentDay;
     });
 
-    // Traiter chaque guess avec les personnages locaux
-    const processedGuesses: GuessResult[] = todayGuessesRaw.map((g) => {
-      const charId = Number(g.characterId);
-      const guessChar = collection.characters?.find((c) => c.id === charId) || null;
+    if (todayGuessesRaw.length === 0) {
+      setGameState((prev) => ({
+        ...prev,
+        guesses: [],
+        isGameWon: false,
+        isGameOver: false,
+        dailyCharacter: null,
+      }));
+      return;
+    }
 
-      console.log(`Character ${charId}:`, guessChar?.name || "NOT FOUND");
+    // Créer une clé unique pour éviter les appels dupliqués
+    const guessKey = todayGuessesRaw.map((g) => `${g.characterId}-${g.timestamp}`).join(",");
+    if (guessKey === lastProcessedGuessesRef.current) {
+      return;
+    }
 
-      // Calculer les comparaisons
-      const comparisons = (guessChar && dailyChar)
-        ? compareAttributes(guessChar, dailyChar, collection.attributes)
-        : [];
+    // Extraire les IDs des personnages devinés
+    const guessedCharacterIds = todayGuessesRaw.map((g) => Number(g.characterId));
 
-      console.log(`Comparisons for ${charId}:`, comparisons.length);
+    // Appeler l'API sécurisée pour obtenir les comparaisons
+    fetch("/api/compare-guess", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        collectionId: collection.id,
+        guessedCharacterIds,
+      }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) {
+          console.error("compare-guess error:", data.error);
+          return;
+        }
 
-      return {
-        isCorrect: g.isCorrect,
-        attempts: charId,
-        characterId: charId,
-        characterName: guessChar?.name ?? `Character #${charId}`,
-        characterImage: guessChar?.imageUrl,
-        comparisons,
-        timestamp: Number(g.timestamp),
-      };
-    });
+        lastProcessedGuessesRef.current = guessKey;
 
-    const isWon = processedGuesses.some((g) => g.isCorrect);
+        const results = data.results || [];
 
-    setGameState((prev) => ({
-      ...prev,
-      guesses: processedGuesses,
-      isGameWon: isWon,
-      isGameOver: isWon,
-      dailyCharacter: dailyChar,
-      dailyCharacterHash: dailyChar ? hashCharacter(dailyChar) : "",
-    }));
-  }, [playerGuesses, dailyCharacterId, collection, currentDay]);
+        // Mapper les résultats aux guesses
+        const processedGuesses: GuessResult[] = todayGuessesRaw.map((g, index) => {
+          const result = results[index];
+          if (!result || result.error) {
+            return {
+              isCorrect: g.isCorrect,
+              attempts: Number(g.characterId),
+              characterId: Number(g.characterId),
+              characterName: `Character #${g.characterId}`,
+              characterImage: undefined,
+              comparisons: [],
+              timestamp: Number(g.timestamp),
+            };
+          }
+
+          return {
+            isCorrect: result.isCorrect,
+            attempts: result.guessedCharacter.id,
+            characterId: result.guessedCharacter.id,
+            characterName: result.guessedCharacter.name,
+            characterImage: result.guessedCharacter.imageUrl,
+            comparisons: result.comparisons as AttributeComparison[],
+            timestamp: Number(g.timestamp),
+          };
+        });
+
+        const isWon = processedGuesses.some((g) => g.isCorrect);
+
+        // Récupérer le personnage du jour UNIQUEMENT si le joueur a gagné
+        let dailyChar: Character | null = null;
+        if (isWon) {
+          const winningGuess = results.find((r: any) => r.isCorrect && r.dailyCharacter);
+          if (winningGuess?.dailyCharacter) {
+            dailyChar = {
+              id: winningGuess.dailyCharacter.id,
+              name: winningGuess.dailyCharacter.name,
+              imageUrl: winningGuess.dailyCharacter.imageUrl,
+              attributes: {},
+            };
+          }
+        }
+
+        setGameState((prev) => ({
+          ...prev,
+          guesses: processedGuesses,
+          isGameWon: isWon,
+          isGameOver: isWon,
+          dailyCharacter: dailyChar,
+          dailyCharacterHash: "",
+        }));
+      })
+      .catch((err) => {
+        console.error("Failed to compare guesses:", err);
+      });
+  }, [playerGuesses, collection.id, currentDay]);
 
   return {
     ...gameState,
     refetch: useCallback(() => {
+      lastProcessedGuessesRef.current = "";
       refetchPlayerGuesses();
       refetchAttempts();
     }, [refetchPlayerGuesses, refetchAttempts]),
@@ -252,26 +288,6 @@ export function useVerifyGuess(collectionId: number, characterId: number) {
   });
 
   return isCorrect;
-}
-
-/**
- * Hook pour récupérer le personnage du jour
- */
-export function useDailyCharacter(collection: Collection) {
-  const [dailyCharacter, setDailyCharacter] = useState<Character | null>(null);
-
-  useEffect(() => {
-    const characters = collection?.characters ?? [];
-    if (characters.length === 0) {
-      setDailyCharacter(null);
-      return;
-    }
-
-    const char = getDailyCharacter(collection);
-    setDailyCharacter(char);
-  }, [collection]);
-
-  return dailyCharacter;
 }
 
 /**

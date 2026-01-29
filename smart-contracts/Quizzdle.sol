@@ -40,8 +40,8 @@ contract Quizzdle {
     uint256 public globalTotalPaid; // Total paid by all users
 
     // Statistiques globales par collection
-    mapping(uint256 => mapping(uint256 => mapping(address => bool))) public hasWonToday; // collectionId => day => player => hasWon
-    mapping(uint256 => mapping(uint256 => uint256)) public winnersTodayCount; // collectionId => day => count
+    mapping(uint256 => mapping(uint256 => mapping(address => uint256))) public winsPerDay; // collectionId => day => player => number of wins
+    mapping(uint256 => mapping(uint256 => uint256)) public winnersTodayCount; // collectionId => day => count of unique winners (deprecated, kept for compatibility)
     mapping(uint256 => mapping(address => bool)) public hasWonEver; // collectionId => player => hasWon
     mapping(uint256 => uint256) public totalWinnersCount; // collectionId => count
 
@@ -51,6 +51,17 @@ contract Quizzdle {
     mapping(address => uint256) public totalReferralEarned; // referrer => lifetime total earned (never reset)
     uint256 public totalReferralRewards; // total rewards accumulated
     uint256 public totalReferralsClaimed; // total rewards claimed
+
+    // Winner rewards system (daily distribution)
+    mapping(uint256 => uint256) public dailyRevenue; // day => total revenue for that day (including all sources)
+    mapping(uint256 => uint256) public totalWinsPerDay; // day => total wins across all collections for that day
+    mapping(address => mapping(uint256 => uint256)) public playerTotalWinsPerDay; // player => day => total wins for that player on that day
+    mapping(uint256 => bool) public dayFinalized; // day => whether rewards have been calculated for that day
+    mapping(uint256 => uint256) public rewardPerWinPerDay; // day => reward amount per win for that day
+    mapping(address => mapping(uint256 => bool)) public claimedDays; // player => day => has claimed rewards for that day
+    uint256 public totalWinnerRewardsDistributed; // total rewards distributed to winners
+    uint256 public totalWinnerRewardsClaimed; // total rewards claimed by winners
+    uint256 public lastProcessedDay; // last day that was finalized
 
     // Stockage des collections : seulement les IDs des personnages
     mapping(uint256 => uint256[]) public collectionCharacterIds; // collectionId => array d'IDs de personnages
@@ -72,6 +83,9 @@ contract Quizzdle {
     event ReferralRewardCredited(address indexed referrer, address indexed player, uint256 amount);
     event ReferralRewardsClaimed(address indexed referrer, uint256 amount);
     event ReferralContractUpdated(address indexed newContract);
+    event DayFinalized(uint256 indexed day, uint256 totalRevenue, uint256 totalWins, uint256 rewardPerWin);
+    event WinnerRewardsClaimed(address indexed player, uint256 indexed day, uint256 amount, uint256 wins);
+    event RevenueAdded(uint256 indexed day, uint256 amount, string source);
 
     // Modifiers
     modifier validCollection(uint256 _collectionId) {
@@ -90,6 +104,38 @@ contract Quizzdle {
      */
     constructor() {
         owner = msg.sender;
+    }
+
+    /**
+     * @dev Ajoute des revenus au pool du jour (pour NFT mint, autres sources, etc.)
+     * @param _source Description de la source de revenus (ex: "NFT Mint", "Premium Feature")
+     */
+    function addRevenue(string memory _source) external payable {
+        require(msg.value > 0, "Revenue amount must be greater than 0");
+
+        uint256 currentDay = block.timestamp / 86400;
+
+        // Ajouter aux revenus du jour
+        dailyRevenue[currentDay] += msg.value;
+
+        // Credit 10% referral reward to referrer if exists
+        if (address(referralContract) != address(0)) {
+            address referrer = referralContract.referredBy(msg.sender);
+            if (referrer != address(0)) {
+                uint256 referralAmount = msg.value / 10;
+                referralRewards[referrer] += referralAmount;
+                totalReferralEarned[referrer] += referralAmount;
+                totalReferralRewards += referralAmount;
+                emit ReferralRewardCredited(referrer, msg.sender, referralAmount);
+            }
+        }
+
+        // Finalize previous day if needed
+        if (currentDay > 0 && !dayFinalized[currentDay - 1] && dailyRevenue[currentDay - 1] > 0) {
+            _finalizeDay(currentDay - 1);
+        }
+
+        emit RevenueAdded(currentDay, msg.value, _source);
     }
 
     /**
@@ -159,9 +205,22 @@ contract Quizzdle {
         // Verifier que les frais sont payes
         require(msg.value >= feePerGuess, "Insufficient fee paid");
 
+        uint256 currentDay = block.timestamp / 86400;
+
+        // Empecher de rejouer apres avoir gagne aujourd'hui pour cette collection
+        require(winsPerDay[_collectionId][currentDay][msg.sender] == 0, "Already won today for this collection");
+
         // Track the fee paid
         totalPaid[msg.sender] += msg.value;
         globalTotalPaid += msg.value;
+
+        // Add revenue to daily pool
+        dailyRevenue[currentDay] += msg.value;
+
+        // Finalize previous day if needed (before processing current guess)
+        if (currentDay > 0 && !dayFinalized[currentDay - 1] && dailyRevenue[currentDay - 1] > 0) {
+            _finalizeDay(currentDay - 1);
+        }
 
         // Credit 10% referral reward to referrer if exists
         if (address(referralContract) != address(0)) {
@@ -174,8 +233,6 @@ contract Quizzdle {
                 emit ReferralRewardCredited(referrer, msg.sender, referralAmount);
             }
         }
-
-        uint256 currentDay = block.timestamp / 86400;
 
         // Calculer le personnage du jour on-chain
         uint256 dailyCharacterId = _getDailyCharacterId(_collectionId);
@@ -190,11 +247,20 @@ contract Quizzdle {
             globalTotalWins++; // Incrementer le total global de toutes les victoires
 
             // Mettre a jour les statistiques globales
-            // Si c'est la premiere victoire de ce joueur aujourd'hui pour cette collection
-            if (!hasWonToday[_collectionId][currentDay][msg.sender]) {
-                hasWonToday[_collectionId][currentDay][msg.sender] = true;
+            // Incrementer le nombre de victoires de ce joueur pour ce jour et cette collection
+            bool isFirstWinTodayForCollection = (winsPerDay[_collectionId][currentDay][msg.sender] == 0);
+            winsPerDay[_collectionId][currentDay][msg.sender]++;
+
+            // Si c'est la premiere victoire de ce joueur aujourd'hui pour cette collection, incrementer le compteur de gagnants uniques
+            if (isFirstWinTodayForCollection) {
                 winnersTodayCount[_collectionId][currentDay]++;
             }
+
+            // Tracker le total de victoires du joueur pour ce jour (toutes collections)
+            playerTotalWinsPerDay[msg.sender][currentDay]++;
+
+            // Incrementer le total de victoires pour ce jour (tous joueurs, toutes collections)
+            totalWinsPerDay[currentDay]++;
 
             // Si c'est la premiere victoire de ce joueur de tous temps pour cette collection
             if (!hasWonEver[_collectionId][msg.sender]) {
@@ -395,6 +461,66 @@ contract Quizzdle {
     }
 
     /**
+     * @dev Finalise un jour en calculant la recompense par victoire
+     * Cette fonction est appelee automatiquement lors de la premiere transaction du jour suivant
+     * Si aucune victoire ce jour-la, le jour est quand meme finalise (les 45% gagnants vont au owner)
+     * @param _day Le jour a finaliser
+     */
+    function _finalizeDay(uint256 _day) internal {
+        require(!dayFinalized[_day], "Day already finalized");
+
+        uint256 totalRevenueForDay = dailyRevenue[_day];
+        uint256 winnersPool = 0;
+        uint256 rewardPerWin = 0;
+
+        // S'il y a des victoires, calculer la distribution
+        if (totalWinsPerDay[_day] > 0) {
+            // Calculer la part pour les gagnants: 45% des revenus du jour
+            // (10% va aux referrals, 45% aux gagnants, 45% au owner)
+            winnersPool = (totalRevenueForDay * 45) / 100;
+
+            // Calculer la recompense par victoire
+            rewardPerWin = winnersPool / totalWinsPerDay[_day];
+
+            // Enregistrer les reserves pour les gagnants
+            totalWinnerRewardsDistributed += winnersPool;
+        }
+        // Sinon, les 45% prevus pour les gagnants restent dans le contrat et sont withdrawable par le owner
+
+        // Enregistrer les donnees
+        rewardPerWinPerDay[_day] = rewardPerWin;
+        dayFinalized[_day] = true;
+        lastProcessedDay = _day;
+
+        emit DayFinalized(_day, totalRevenueForDay, totalWinsPerDay[_day], rewardPerWin);
+    }
+
+    /**
+     * @dev Permet a un joueur de reclamer ses recompenses de victoires pour un jour specifique
+     * @param _day Le jour pour lequel reclamer les recompenses (timestamp / 86400)
+     */
+    function claimWinnerRewards(uint256 _day) external {
+        require(dayFinalized[_day], "Day not finalized yet");
+        require(!claimedDays[msg.sender][_day], "Rewards already claimed for this day");
+
+        uint256 playerWins = playerTotalWinsPerDay[msg.sender][_day];
+        require(playerWins > 0, "No wins for this day");
+
+        uint256 rewardAmount = rewardPerWinPerDay[_day] * playerWins;
+        require(rewardAmount > 0, "No rewards to claim");
+
+        // Marquer comme reclame
+        claimedDays[msg.sender][_day] = true;
+        totalWinnerRewardsClaimed += rewardAmount;
+
+        // Transferer les recompenses
+        (bool success, ) = payable(msg.sender).call{value: rewardAmount}("");
+        require(success, "Winner reward transfer failed");
+
+        emit WinnerRewardsClaimed(msg.sender, _day, rewardAmount, playerWins);
+    }
+
+    /**
      * @dev Permet a un referrer de reclamer ses recompenses accumulees
      */
     function claimReferralRewards() external {
@@ -433,6 +559,64 @@ contract Quizzdle {
     }
 
     /**
+     * @dev Recupere les recompenses de victoires en attente pour un joueur pour un jour specifique
+     * @param _player Adresse du joueur
+     * @param _day Jour pour lequel verifier (timestamp / 86400)
+     * @return amount Montant claimable en wei (0 si deja reclame ou jour non finalise)
+     */
+    function getPendingWinnerRewards(address _player, uint256 _day)
+        external
+        view
+        returns (uint256)
+    {
+        if (!dayFinalized[_day] || claimedDays[_player][_day]) {
+            return 0;
+        }
+        uint256 playerWins = playerTotalWinsPerDay[_player][_day];
+        if (playerWins == 0) {
+            return 0;
+        }
+        return rewardPerWinPerDay[_day] * playerWins;
+    }
+
+    /**
+     * @dev Recupere le jour actuel (timestamp / 86400)
+     */
+    function getCurrentDay()
+        external
+        view
+        returns (uint256)
+    {
+        return block.timestamp / 86400;
+    }
+
+    /**
+     * @dev Recupere le nombre de victoires d'un joueur pour un jour donne (toutes collections)
+     * @param _player Adresse du joueur
+     * @param _day Jour (timestamp / 86400)
+     */
+    function getPlayerWinsForDay(address _player, uint256 _day)
+        external
+        view
+        returns (uint256)
+    {
+        return playerTotalWinsPerDay[_player][_day];
+    }
+
+    /**
+     * @dev Verifie si un joueur a deja reclame ses recompenses pour un jour donne
+     * @param _player Adresse du joueur
+     * @param _day Jour (timestamp / 86400)
+     */
+    function hasClaimedDay(address _player, uint256 _day)
+        external
+        view
+        returns (bool)
+    {
+        return claimedDays[_player][_day];
+    }
+
+    /**
      * @dev Definit le salt pour le calcul du personnage du jour (seulement owner)
      * @param _newSalt Nouveau salt (bytes32)
      */
@@ -458,6 +642,7 @@ contract Quizzdle {
 
     /**
      * @dev Retire les fonds accumules dans le contrat (seulement owner)
+     * Le owner peut retirer 45% des revenus (apres deduction de 10% referral et 45% winners)
      * @param _to Adresse vers laquelle envoyer les fonds
      */
     function withdraw(address payable _to)
@@ -466,8 +651,18 @@ contract Quizzdle {
     {
         require(_to != address(0), "Invalid address");
         uint256 balance = address(this).balance;
+
+        // Reserves pour referrals non reclames
         uint256 reservedForReferrals = totalReferralRewards - totalReferralsClaimed;
-        uint256 withdrawable = balance > reservedForReferrals ? balance - reservedForReferrals : 0;
+
+        // Reserves pour winner rewards non reclames
+        uint256 reservedForWinners = totalWinnerRewardsDistributed - totalWinnerRewardsClaimed;
+
+        // Total reserve
+        uint256 totalReserved = reservedForReferrals + reservedForWinners;
+
+        // Withdrawable = balance - reserves
+        uint256 withdrawable = balance > totalReserved ? balance - totalReserved : 0;
         require(withdrawable > 0, "No funds to withdraw");
 
         (bool success, ) = _to.call{value: withdrawable}("");

@@ -8,8 +8,7 @@ import { WalletButton } from "./WalletButton";
 // Flame icon for streak
 const FlameIcon = () => (
   <svg
-    width="24"
-    height="24"
+    className="w-5 h-5 sm:w-6 sm:h-6"
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
@@ -62,13 +61,13 @@ export function GmStreakCard() {
     <div className="w-full relative bg-gradient-to-r from-[#121217] via-[#1a1a2e] to-[#121217] border border-violet-500/20 rounded-2xl shadow-xl shadow-violet-500/10 overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-r from-violet-500/5 via-blue-500/5 to-violet-500/5 pointer-events-none" />
 
-      <div className="relative z-10 p-4 sm:p-6">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div className="relative z-10 p-3 sm:p-6">
+        <div className="flex flex-row items-center justify-between gap-2 sm:gap-4">
           {/* Streak section */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             {/* Icon with animation if streak active */}
             <div
-              className={`p-3 rounded-xl ${
+              className={`p-2 sm:p-3 rounded-lg sm:rounded-xl ${
                 isStreakActive && streak > 0
                   ? "bg-orange-500/20 text-orange-400"
                   : "bg-white/10 text-white/50"
@@ -79,32 +78,38 @@ export function GmStreakCard() {
 
             {/* Stats */}
             <div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl sm:text-4xl font-black bg-gradient-to-r from-orange-400 to-yellow-400 bg-clip-text text-transparent">
+              <div className="flex items-baseline gap-1 sm:gap-2">
+                <span className="text-xl sm:text-4xl font-black bg-gradient-to-r from-orange-400 to-yellow-400 bg-clip-text text-transparent">
                   {streak}
                 </span>
-                <span className="text-white/70 text-sm">
+                <span className="text-white/70 text-xs sm:text-sm">
                   day{streak > 1 ? "s" : ""} streak
                 </span>
               </div>
               {longestStreak > 0 && (
-                <p className="text-white/50 text-xs mt-1">
+                <p className="text-white/50 text-[10px] sm:text-xs mt-0.5 sm:mt-1">
                   Best: {longestStreak} day{longestStreak > 1 ? "s" : ""}
+                </p>
+              )}
+              {/* First time message - inline with stats */}
+              {isConnected && streak === 0 && longestStreak === 0 && canGmToday && (
+                <p className="text-white/50 text-[10px] sm:text-xs mt-0.5 sm:mt-1">
+                  Start your streak!
                 </p>
               )}
             </div>
           </div>
 
           {/* GM Button */}
-          <div className="w-full sm:w-auto">
+          <div className="flex-shrink-0">
             {!isConnected ? (
-              <WalletButton fullWidth className="h-12" />
+              <WalletButton className="h-9 sm:h-12 text-sm sm:text-base px-3 sm:px-4" />
             ) : canGmToday ? (
               <button
                 onClick={handleGm}
                 disabled={isLoading}
                 className={`
-                  w-full sm:w-auto h-12 px-8 rounded-xl font-bold text-lg
+                  h-9 sm:h-12 px-4 sm:px-8 rounded-lg sm:rounded-xl font-bold text-sm sm:text-lg
                   transition-all duration-300 transform
                   ${
                     isLoading
@@ -116,19 +121,19 @@ export function GmStreakCard() {
                 {isLoading ? "..." : "GM!"}
               </button>
             ) : (
-              <div className="flex items-center gap-2 px-6 py-3 rounded-xl bg-green-500/20 border border-green-500/30">
+              <div className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl bg-green-500/20 border border-green-500/30">
                 <svg
-                  width="20"
-                  height="20"
+                  width="16"
+                  height="16"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="2"
-                  className="text-green-400"
+                  className="text-green-400 sm:w-5 sm:h-5"
                 >
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
-                <span className="text-green-400 font-medium">
+                <span className="text-green-400 font-medium text-xs sm:text-base">
                   GM sent!
                 </span>
               </div>
@@ -138,19 +143,13 @@ export function GmStreakCard() {
 
         {/* Warning message if streak ended */}
         {isConnected && !isStreakActive && streak === 0 && longestStreak > 0 && (
-          <div className="mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-            <p className="text-red-400 text-sm text-center">
+          <div className="mt-2 sm:mt-4 p-2 sm:p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+            <p className="text-red-400 text-xs sm:text-sm text-center">
               Your {longestStreak} day{longestStreak > 1 ? "s" : ""} streak has ended. Start again today!
             </p>
           </div>
         )}
 
-        {/* First time message */}
-        {isConnected && streak === 0 && longestStreak === 0 && canGmToday && (
-          <p className="mt-3 text-white/50 text-sm text-center sm:text-left">
-            Start your streak by sending your first GM!
-          </p>
-        )}
       </div>
     </div>
   );

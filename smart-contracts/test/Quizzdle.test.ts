@@ -370,12 +370,19 @@ describe("Quizzdle", function () {
       expect(await quizzdle.getTotalWinnersCount(COLLECTION_ID)).to.equal(2);
     });
 
-    it("Should track hasWonToday correctly", async function () {
+    it("Should track winsPerDay correctly", async function () {
       const currentDay = await getCurrentDay();
 
-      expect(await quizzdle.hasWonToday(COLLECTION_ID, currentDay, player1.address)).to.be.false;
+      // Initially, player has 0 wins
+      expect(await quizzdle.winsPerDay(COLLECTION_ID, currentDay, player1.address)).to.equal(0);
+
+      // After winning, player has 1 win
       await quizzdle.connect(player1).makeGuess(COLLECTION_ID, dailyCharacterId, { value: DEFAULT_FEE });
-      expect(await quizzdle.hasWonToday(COLLECTION_ID, currentDay, player1.address)).to.be.true;
+      expect(await quizzdle.winsPerDay(COLLECTION_ID, currentDay, player1.address)).to.equal(1);
+
+      // If player wins again on the same collection, it should increment
+      await quizzdle.connect(player1).makeGuess(COLLECTION_ID, dailyCharacterId, { value: DEFAULT_FEE });
+      expect(await quizzdle.winsPerDay(COLLECTION_ID, currentDay, player1.address)).to.equal(2);
     });
 
     it("Should track hasWonEver correctly", async function () {

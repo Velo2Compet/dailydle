@@ -50,17 +50,25 @@ export declare namespace Quizzdle {
 export interface QuizzdleInterface extends Interface {
   getFunction(
     nameOrSignature:
+      | "addRevenue"
       | "attemptsPerDay"
       | "claimReferralRewards"
+      | "claimWinnerRewards"
+      | "claimedDays"
       | "collectionCharacterIds"
       | "collectionExists"
+      | "dailyRevenue"
+      | "dayFinalized"
       | "feePerGuess"
       | "getAttempts"
       | "getCollectionCharacterIds"
+      | "getCurrentDay"
       | "getDailyCharacterId"
       | "getGlobalTotalPaid"
       | "getGlobalTotalWins"
+      | "getPendingWinnerRewards"
       | "getPlayerGuesses"
+      | "getPlayerWinsForDay"
       | "getTotalPaid"
       | "getTotalReferralEarned"
       | "getTotalWinnersCount"
@@ -69,14 +77,17 @@ export interface QuizzdleInterface extends Interface {
       | "getWinsPerCollection"
       | "globalTotalPaid"
       | "globalTotalWins"
+      | "hasClaimedDay"
       | "hasWonEver"
-      | "hasWonToday"
+      | "lastProcessedDay"
       | "makeGuess"
       | "owner"
       | "pendingReferralRewards"
       | "playerGuesses"
+      | "playerTotalWinsPerDay"
       | "referralContract"
       | "referralRewards"
+      | "rewardPerWinPerDay"
       | "setFee"
       | "setReferralContract"
       | "setSalt"
@@ -84,13 +95,17 @@ export interface QuizzdleInterface extends Interface {
       | "totalReferralEarned"
       | "totalReferralRewards"
       | "totalReferralsClaimed"
+      | "totalWinnerRewardsClaimed"
+      | "totalWinnerRewardsDistributed"
       | "totalWinnersCount"
       | "totalWins"
+      | "totalWinsPerDay"
       | "updateCollectionCharacterIds"
       | "updateMultipleCollections"
       | "verifyGuess"
       | "winnersTodayCount"
       | "winsPerCollection"
+      | "winsPerDay"
       | "withdraw"
   ): FunctionFragment;
 
@@ -98,15 +113,19 @@ export interface QuizzdleInterface extends Interface {
     nameOrSignatureOrTopic:
       | "CollectionUpdated"
       | "CollectionsUpdated"
+      | "DayFinalized"
       | "FeeUpdated"
       | "FundsWithdrawn"
       | "GuessMade"
       | "ReferralContractUpdated"
       | "ReferralRewardCredited"
       | "ReferralRewardsClaimed"
+      | "RevenueAdded"
       | "SaltUpdated"
+      | "WinnerRewardsClaimed"
   ): EventFragment;
 
+  encodeFunctionData(functionFragment: "addRevenue", values: [string]): string;
   encodeFunctionData(
     functionFragment: "attemptsPerDay",
     values: [AddressLike, BigNumberish, BigNumberish]
@@ -116,11 +135,27 @@ export interface QuizzdleInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "claimWinnerRewards",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "claimedDays",
+    values: [AddressLike, BigNumberish]
+  ): string;
+  encodeFunctionData(
     functionFragment: "collectionCharacterIds",
     values: [BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "collectionExists",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "dailyRevenue",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "dayFinalized",
     values: [BigNumberish]
   ): string;
   encodeFunctionData(
@@ -136,6 +171,10 @@ export interface QuizzdleInterface extends Interface {
     values: [BigNumberish]
   ): string;
   encodeFunctionData(
+    functionFragment: "getCurrentDay",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
     functionFragment: "getDailyCharacterId",
     values: [BigNumberish]
   ): string;
@@ -148,7 +187,15 @@ export interface QuizzdleInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "getPendingWinnerRewards",
+    values: [AddressLike, BigNumberish]
+  ): string;
+  encodeFunctionData(
     functionFragment: "getPlayerGuesses",
+    values: [AddressLike, BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getPlayerWinsForDay",
     values: [AddressLike, BigNumberish]
   ): string;
   encodeFunctionData(
@@ -184,12 +231,16 @@ export interface QuizzdleInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "hasClaimedDay",
+    values: [AddressLike, BigNumberish]
+  ): string;
+  encodeFunctionData(
     functionFragment: "hasWonEver",
     values: [BigNumberish, AddressLike]
   ): string;
   encodeFunctionData(
-    functionFragment: "hasWonToday",
-    values: [BigNumberish, BigNumberish, AddressLike]
+    functionFragment: "lastProcessedDay",
+    values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "makeGuess",
@@ -205,12 +256,20 @@ export interface QuizzdleInterface extends Interface {
     values: [AddressLike, BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
+    functionFragment: "playerTotalWinsPerDay",
+    values: [AddressLike, BigNumberish]
+  ): string;
+  encodeFunctionData(
     functionFragment: "referralContract",
     values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "referralRewards",
     values: [AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "rewardPerWinPerDay",
+    values: [BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "setFee",
@@ -238,12 +297,24 @@ export interface QuizzdleInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "totalWinnerRewardsClaimed",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "totalWinnerRewardsDistributed",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
     functionFragment: "totalWinnersCount",
     values: [BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "totalWins",
     values: [AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "totalWinsPerDay",
+    values: [BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "updateCollectionCharacterIds",
@@ -266,10 +337,15 @@ export interface QuizzdleInterface extends Interface {
     values: [AddressLike, BigNumberish]
   ): string;
   encodeFunctionData(
+    functionFragment: "winsPerDay",
+    values: [BigNumberish, BigNumberish, AddressLike]
+  ): string;
+  encodeFunctionData(
     functionFragment: "withdraw",
     values: [AddressLike]
   ): string;
 
+  decodeFunctionResult(functionFragment: "addRevenue", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "attemptsPerDay",
     data: BytesLike
@@ -279,11 +355,27 @@ export interface QuizzdleInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "claimWinnerRewards",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "claimedDays",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "collectionCharacterIds",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
     functionFragment: "collectionExists",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "dailyRevenue",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "dayFinalized",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -299,6 +391,10 @@ export interface QuizzdleInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "getCurrentDay",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "getDailyCharacterId",
     data: BytesLike
   ): Result;
@@ -311,7 +407,15 @@ export interface QuizzdleInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "getPendingWinnerRewards",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "getPlayerGuesses",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "getPlayerWinsForDay",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -346,9 +450,13 @@ export interface QuizzdleInterface extends Interface {
     functionFragment: "globalTotalWins",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(
+    functionFragment: "hasClaimedDay",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "hasWonEver", data: BytesLike): Result;
   decodeFunctionResult(
-    functionFragment: "hasWonToday",
+    functionFragment: "lastProcessedDay",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "makeGuess", data: BytesLike): Result;
@@ -362,11 +470,19 @@ export interface QuizzdleInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "playerTotalWinsPerDay",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "referralContract",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
     functionFragment: "referralRewards",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "rewardPerWinPerDay",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "setFee", data: BytesLike): Result;
@@ -389,10 +505,22 @@ export interface QuizzdleInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "totalWinnerRewardsClaimed",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "totalWinnerRewardsDistributed",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "totalWinnersCount",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "totalWins", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "totalWinsPerDay",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(
     functionFragment: "updateCollectionCharacterIds",
     data: BytesLike
@@ -413,6 +541,7 @@ export interface QuizzdleInterface extends Interface {
     functionFragment: "winsPerCollection",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "winsPerDay", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "withdraw", data: BytesLike): Result;
 }
 
@@ -437,6 +566,31 @@ export namespace CollectionsUpdatedEvent {
   export type OutputTuple = [collectionIds: bigint[]];
   export interface OutputObject {
     collectionIds: bigint[];
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace DayFinalizedEvent {
+  export type InputTuple = [
+    day: BigNumberish,
+    totalRevenue: BigNumberish,
+    totalWins: BigNumberish,
+    rewardPerWin: BigNumberish
+  ];
+  export type OutputTuple = [
+    day: bigint,
+    totalRevenue: bigint,
+    totalWins: bigint,
+    rewardPerWin: bigint
+  ];
+  export interface OutputObject {
+    day: bigint;
+    totalRevenue: bigint;
+    totalWins: bigint;
+    rewardPerWin: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -540,10 +694,53 @@ export namespace ReferralRewardsClaimedEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
+export namespace RevenueAddedEvent {
+  export type InputTuple = [
+    day: BigNumberish,
+    amount: BigNumberish,
+    source: string
+  ];
+  export type OutputTuple = [day: bigint, amount: bigint, source: string];
+  export interface OutputObject {
+    day: bigint;
+    amount: bigint;
+    source: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
 export namespace SaltUpdatedEvent {
   export type InputTuple = [];
   export type OutputTuple = [];
   export interface OutputObject {}
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace WinnerRewardsClaimedEvent {
+  export type InputTuple = [
+    player: AddressLike,
+    day: BigNumberish,
+    amount: BigNumberish,
+    wins: BigNumberish
+  ];
+  export type OutputTuple = [
+    player: string,
+    day: bigint,
+    amount: bigint,
+    wins: bigint
+  ];
+  export interface OutputObject {
+    player: string;
+    day: bigint;
+    amount: bigint;
+    wins: bigint;
+  }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
   export type Log = TypedEventLog<Event>;
@@ -593,6 +790,8 @@ export interface Quizzdle extends BaseContract {
     event?: TCEvent
   ): Promise<this>;
 
+  addRevenue: TypedContractMethod<[_source: string], [void], "payable">;
+
   attemptsPerDay: TypedContractMethod<
     [arg0: AddressLike, arg1: BigNumberish, arg2: BigNumberish],
     [bigint],
@@ -600,6 +799,18 @@ export interface Quizzdle extends BaseContract {
   >;
 
   claimReferralRewards: TypedContractMethod<[], [void], "nonpayable">;
+
+  claimWinnerRewards: TypedContractMethod<
+    [_day: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+
+  claimedDays: TypedContractMethod<
+    [arg0: AddressLike, arg1: BigNumberish],
+    [boolean],
+    "view"
+  >;
 
   collectionCharacterIds: TypedContractMethod<
     [arg0: BigNumberish, arg1: BigNumberish],
@@ -612,6 +823,10 @@ export interface Quizzdle extends BaseContract {
     [boolean],
     "view"
   >;
+
+  dailyRevenue: TypedContractMethod<[arg0: BigNumberish], [bigint], "view">;
+
+  dayFinalized: TypedContractMethod<[arg0: BigNumberish], [boolean], "view">;
 
   feePerGuess: TypedContractMethod<[], [bigint], "view">;
 
@@ -627,6 +842,8 @@ export interface Quizzdle extends BaseContract {
     "view"
   >;
 
+  getCurrentDay: TypedContractMethod<[], [bigint], "view">;
+
   getDailyCharacterId: TypedContractMethod<
     [_collectionId: BigNumberish],
     [bigint],
@@ -637,9 +854,21 @@ export interface Quizzdle extends BaseContract {
 
   getGlobalTotalWins: TypedContractMethod<[], [bigint], "view">;
 
+  getPendingWinnerRewards: TypedContractMethod<
+    [_player: AddressLike, _day: BigNumberish],
+    [bigint],
+    "view"
+  >;
+
   getPlayerGuesses: TypedContractMethod<
     [_player: AddressLike, _collectionId: BigNumberish],
     [Quizzdle.GuessStructOutput[]],
+    "view"
+  >;
+
+  getPlayerWinsForDay: TypedContractMethod<
+    [_player: AddressLike, _day: BigNumberish],
+    [bigint],
     "view"
   >;
 
@@ -675,17 +904,19 @@ export interface Quizzdle extends BaseContract {
 
   globalTotalWins: TypedContractMethod<[], [bigint], "view">;
 
+  hasClaimedDay: TypedContractMethod<
+    [_player: AddressLike, _day: BigNumberish],
+    [boolean],
+    "view"
+  >;
+
   hasWonEver: TypedContractMethod<
     [arg0: BigNumberish, arg1: AddressLike],
     [boolean],
     "view"
   >;
 
-  hasWonToday: TypedContractMethod<
-    [arg0: BigNumberish, arg1: BigNumberish, arg2: AddressLike],
-    [boolean],
-    "view"
-  >;
+  lastProcessedDay: TypedContractMethod<[], [bigint], "view">;
 
   makeGuess: TypedContractMethod<
     [_collectionId: BigNumberish, _characterId: BigNumberish],
@@ -715,9 +946,21 @@ export interface Quizzdle extends BaseContract {
     "view"
   >;
 
+  playerTotalWinsPerDay: TypedContractMethod<
+    [arg0: AddressLike, arg1: BigNumberish],
+    [bigint],
+    "view"
+  >;
+
   referralContract: TypedContractMethod<[], [string], "view">;
 
   referralRewards: TypedContractMethod<[arg0: AddressLike], [bigint], "view">;
+
+  rewardPerWinPerDay: TypedContractMethod<
+    [arg0: BigNumberish],
+    [bigint],
+    "view"
+  >;
 
   setFee: TypedContractMethod<[_newFee: BigNumberish], [void], "nonpayable">;
 
@@ -741,6 +984,10 @@ export interface Quizzdle extends BaseContract {
 
   totalReferralsClaimed: TypedContractMethod<[], [bigint], "view">;
 
+  totalWinnerRewardsClaimed: TypedContractMethod<[], [bigint], "view">;
+
+  totalWinnerRewardsDistributed: TypedContractMethod<[], [bigint], "view">;
+
   totalWinnersCount: TypedContractMethod<
     [arg0: BigNumberish],
     [bigint],
@@ -748,6 +995,8 @@ export interface Quizzdle extends BaseContract {
   >;
 
   totalWins: TypedContractMethod<[arg0: AddressLike], [bigint], "view">;
+
+  totalWinsPerDay: TypedContractMethod<[arg0: BigNumberish], [bigint], "view">;
 
   updateCollectionCharacterIds: TypedContractMethod<
     [_collectionId: BigNumberish, _characterIds: BigNumberish[]],
@@ -779,12 +1028,21 @@ export interface Quizzdle extends BaseContract {
     "view"
   >;
 
+  winsPerDay: TypedContractMethod<
+    [arg0: BigNumberish, arg1: BigNumberish, arg2: AddressLike],
+    [bigint],
+    "view"
+  >;
+
   withdraw: TypedContractMethod<[_to: AddressLike], [void], "nonpayable">;
 
   getFunction<T extends ContractMethod = ContractMethod>(
     key: string | FunctionFragment
   ): T;
 
+  getFunction(
+    nameOrSignature: "addRevenue"
+  ): TypedContractMethod<[_source: string], [void], "payable">;
   getFunction(
     nameOrSignature: "attemptsPerDay"
   ): TypedContractMethod<
@@ -796,6 +1054,16 @@ export interface Quizzdle extends BaseContract {
     nameOrSignature: "claimReferralRewards"
   ): TypedContractMethod<[], [void], "nonpayable">;
   getFunction(
+    nameOrSignature: "claimWinnerRewards"
+  ): TypedContractMethod<[_day: BigNumberish], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "claimedDays"
+  ): TypedContractMethod<
+    [arg0: AddressLike, arg1: BigNumberish],
+    [boolean],
+    "view"
+  >;
+  getFunction(
     nameOrSignature: "collectionCharacterIds"
   ): TypedContractMethod<
     [arg0: BigNumberish, arg1: BigNumberish],
@@ -804,6 +1072,12 @@ export interface Quizzdle extends BaseContract {
   >;
   getFunction(
     nameOrSignature: "collectionExists"
+  ): TypedContractMethod<[arg0: BigNumberish], [boolean], "view">;
+  getFunction(
+    nameOrSignature: "dailyRevenue"
+  ): TypedContractMethod<[arg0: BigNumberish], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "dayFinalized"
   ): TypedContractMethod<[arg0: BigNumberish], [boolean], "view">;
   getFunction(
     nameOrSignature: "feePerGuess"
@@ -819,6 +1093,9 @@ export interface Quizzdle extends BaseContract {
     nameOrSignature: "getCollectionCharacterIds"
   ): TypedContractMethod<[_collectionId: BigNumberish], [bigint[]], "view">;
   getFunction(
+    nameOrSignature: "getCurrentDay"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
     nameOrSignature: "getDailyCharacterId"
   ): TypedContractMethod<[_collectionId: BigNumberish], [bigint], "view">;
   getFunction(
@@ -828,10 +1105,24 @@ export interface Quizzdle extends BaseContract {
     nameOrSignature: "getGlobalTotalWins"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
+    nameOrSignature: "getPendingWinnerRewards"
+  ): TypedContractMethod<
+    [_player: AddressLike, _day: BigNumberish],
+    [bigint],
+    "view"
+  >;
+  getFunction(
     nameOrSignature: "getPlayerGuesses"
   ): TypedContractMethod<
     [_player: AddressLike, _collectionId: BigNumberish],
     [Quizzdle.GuessStructOutput[]],
+    "view"
+  >;
+  getFunction(
+    nameOrSignature: "getPlayerWinsForDay"
+  ): TypedContractMethod<
+    [_player: AddressLike, _day: BigNumberish],
+    [bigint],
     "view"
   >;
   getFunction(
@@ -867,6 +1158,13 @@ export interface Quizzdle extends BaseContract {
     nameOrSignature: "globalTotalWins"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
+    nameOrSignature: "hasClaimedDay"
+  ): TypedContractMethod<
+    [_player: AddressLike, _day: BigNumberish],
+    [boolean],
+    "view"
+  >;
+  getFunction(
     nameOrSignature: "hasWonEver"
   ): TypedContractMethod<
     [arg0: BigNumberish, arg1: AddressLike],
@@ -874,12 +1172,8 @@ export interface Quizzdle extends BaseContract {
     "view"
   >;
   getFunction(
-    nameOrSignature: "hasWonToday"
-  ): TypedContractMethod<
-    [arg0: BigNumberish, arg1: BigNumberish, arg2: AddressLike],
-    [boolean],
-    "view"
-  >;
+    nameOrSignature: "lastProcessedDay"
+  ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "makeGuess"
   ): TypedContractMethod<
@@ -909,11 +1203,21 @@ export interface Quizzdle extends BaseContract {
     "view"
   >;
   getFunction(
+    nameOrSignature: "playerTotalWinsPerDay"
+  ): TypedContractMethod<
+    [arg0: AddressLike, arg1: BigNumberish],
+    [bigint],
+    "view"
+  >;
+  getFunction(
     nameOrSignature: "referralContract"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "referralRewards"
   ): TypedContractMethod<[arg0: AddressLike], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "rewardPerWinPerDay"
+  ): TypedContractMethod<[arg0: BigNumberish], [bigint], "view">;
   getFunction(
     nameOrSignature: "setFee"
   ): TypedContractMethod<[_newFee: BigNumberish], [void], "nonpayable">;
@@ -940,11 +1244,20 @@ export interface Quizzdle extends BaseContract {
     nameOrSignature: "totalReferralsClaimed"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
+    nameOrSignature: "totalWinnerRewardsClaimed"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "totalWinnerRewardsDistributed"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
     nameOrSignature: "totalWinnersCount"
   ): TypedContractMethod<[arg0: BigNumberish], [bigint], "view">;
   getFunction(
     nameOrSignature: "totalWins"
   ): TypedContractMethod<[arg0: AddressLike], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "totalWinsPerDay"
+  ): TypedContractMethod<[arg0: BigNumberish], [bigint], "view">;
   getFunction(
     nameOrSignature: "updateCollectionCharacterIds"
   ): TypedContractMethod<
@@ -981,6 +1294,13 @@ export interface Quizzdle extends BaseContract {
     "view"
   >;
   getFunction(
+    nameOrSignature: "winsPerDay"
+  ): TypedContractMethod<
+    [arg0: BigNumberish, arg1: BigNumberish, arg2: AddressLike],
+    [bigint],
+    "view"
+  >;
+  getFunction(
     nameOrSignature: "withdraw"
   ): TypedContractMethod<[_to: AddressLike], [void], "nonpayable">;
 
@@ -997,6 +1317,13 @@ export interface Quizzdle extends BaseContract {
     CollectionsUpdatedEvent.InputTuple,
     CollectionsUpdatedEvent.OutputTuple,
     CollectionsUpdatedEvent.OutputObject
+  >;
+  getEvent(
+    key: "DayFinalized"
+  ): TypedContractEvent<
+    DayFinalizedEvent.InputTuple,
+    DayFinalizedEvent.OutputTuple,
+    DayFinalizedEvent.OutputObject
   >;
   getEvent(
     key: "FeeUpdated"
@@ -1041,11 +1368,25 @@ export interface Quizzdle extends BaseContract {
     ReferralRewardsClaimedEvent.OutputObject
   >;
   getEvent(
+    key: "RevenueAdded"
+  ): TypedContractEvent<
+    RevenueAddedEvent.InputTuple,
+    RevenueAddedEvent.OutputTuple,
+    RevenueAddedEvent.OutputObject
+  >;
+  getEvent(
     key: "SaltUpdated"
   ): TypedContractEvent<
     SaltUpdatedEvent.InputTuple,
     SaltUpdatedEvent.OutputTuple,
     SaltUpdatedEvent.OutputObject
+  >;
+  getEvent(
+    key: "WinnerRewardsClaimed"
+  ): TypedContractEvent<
+    WinnerRewardsClaimedEvent.InputTuple,
+    WinnerRewardsClaimedEvent.OutputTuple,
+    WinnerRewardsClaimedEvent.OutputObject
   >;
 
   filters: {
@@ -1069,6 +1410,17 @@ export interface Quizzdle extends BaseContract {
       CollectionsUpdatedEvent.InputTuple,
       CollectionsUpdatedEvent.OutputTuple,
       CollectionsUpdatedEvent.OutputObject
+    >;
+
+    "DayFinalized(uint256,uint256,uint256,uint256)": TypedContractEvent<
+      DayFinalizedEvent.InputTuple,
+      DayFinalizedEvent.OutputTuple,
+      DayFinalizedEvent.OutputObject
+    >;
+    DayFinalized: TypedContractEvent<
+      DayFinalizedEvent.InputTuple,
+      DayFinalizedEvent.OutputTuple,
+      DayFinalizedEvent.OutputObject
     >;
 
     "FeeUpdated(uint256)": TypedContractEvent<
@@ -1137,6 +1489,17 @@ export interface Quizzdle extends BaseContract {
       ReferralRewardsClaimedEvent.OutputObject
     >;
 
+    "RevenueAdded(uint256,uint256,string)": TypedContractEvent<
+      RevenueAddedEvent.InputTuple,
+      RevenueAddedEvent.OutputTuple,
+      RevenueAddedEvent.OutputObject
+    >;
+    RevenueAdded: TypedContractEvent<
+      RevenueAddedEvent.InputTuple,
+      RevenueAddedEvent.OutputTuple,
+      RevenueAddedEvent.OutputObject
+    >;
+
     "SaltUpdated()": TypedContractEvent<
       SaltUpdatedEvent.InputTuple,
       SaltUpdatedEvent.OutputTuple,
@@ -1146,6 +1509,17 @@ export interface Quizzdle extends BaseContract {
       SaltUpdatedEvent.InputTuple,
       SaltUpdatedEvent.OutputTuple,
       SaltUpdatedEvent.OutputObject
+    >;
+
+    "WinnerRewardsClaimed(address,uint256,uint256,uint256)": TypedContractEvent<
+      WinnerRewardsClaimedEvent.InputTuple,
+      WinnerRewardsClaimedEvent.OutputTuple,
+      WinnerRewardsClaimedEvent.OutputObject
+    >;
+    WinnerRewardsClaimed: TypedContractEvent<
+      WinnerRewardsClaimedEvent.InputTuple,
+      WinnerRewardsClaimedEvent.OutputTuple,
+      WinnerRewardsClaimedEvent.OutputObject
     >;
   };
 }
