@@ -1,18 +1,30 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { useAccount } from "wagmi";
+import { useAccount, useReadContract } from "wagmi";
 import { useMiniKit } from "@coinbase/onchainkit/minikit";
+import { parseAbi } from "viem";
+import { APP_CHAIN_ID } from "@/lib/chain-config";
 import { Collection } from "@/types/game";
 import { CharacterSelector } from "./CharacterSelector";
 import { StatsHeader } from "./StatsHeader";
 import { GameFooter } from "./GameFooter";
+import { Footer } from "./Footer";
 import { WalletButton } from "./WalletButton";
 import { Button } from "./Button";
 import { VictoryAnimation } from "./VictoryAnimation";
-import { useMakeGuess, useGameState, useCollectionStats } from "@/hooks/useGame";
-import { useReadContract } from "wagmi";
+import { useSecureGame } from "@/hooks/useSecureGame";
 import { formatAttributeValue } from "@/utils/game";
 import { ArrowDown, ArrowUp, Send, Loader2 } from "lucide-react";
+
+// Contract configuration for stats
+const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}`;
+
+const statsAbi = parseAbi([
+  "function winsPerCollection(address player, uint256 collectionId) external view returns (uint256)",
+  "function winsPerDayPerCollection(uint256 collectionId, uint256 day) external view returns (uint256)",
+  "function globalTotalWins() external view returns (uint256)",
+  "function collectionExists(uint256 collectionId) external view returns (bool)",
+]);
 
 // Composant Tooltip personnalisé pour mobile et desktop
 function MobileTooltip({
@@ -145,64 +157,102 @@ interface GameBoardProps {
 }
 
 export function GameBoard({ collection }: GameBoardProps) {
-  const { isConnected } = useAccount();
+  const { address, isConnected } = useAccount();
   const { context, isFrameReady } = useMiniKit();
   const isFarcasterConnected = !!context?.user?.fid;
   const [selectedCharacterId, setSelectedCharacterId] = useState<number | null>(null);
   const [selectedCharacterName, setSelectedCharacterName] = useState<string | undefined>(undefined);
   const [selectedCharacterImage, setSelectedCharacterImage] = useState<string | undefined>(undefined);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [localErrorMessage, setLocalErrorMessage] = useState<string | null>(null);
   // État pour suivre quelles colonnes ont été révélées pour chaque guess (clé = index dans le tableau)
   const [revealedColumns, setRevealedColumns] = useState<Map<number, Set<number>>>(new Map());
   // État pour suivre quels guesses ont été complètement révélés (plus besoin d'animation)
   const [fullyRevealedGuesses, setFullyRevealedGuesses] = useState<Set<number>>(new Set());
   // État pour suivre le nombre de guesses précédents (pour détecter les nouveaux)
   const [previousGuessesCount, setPreviousGuessesCount] = useState<number>(0);
-  
-  const { makeGuess, isPending, isConfirming, isConfirmed, error } = useMakeGuess();
-  const gameStateResult = useGameState(collection);
-  const gameState = {
-    collectionId: gameStateResult.collectionId,
-    dailyCharacter: gameStateResult.dailyCharacter,
-    dailyCharacterHash: gameStateResult.dailyCharacterHash,
-    attempts: gameStateResult.attempts,
-    maxAttempts: gameStateResult.maxAttempts,
-    guesses: gameStateResult.guesses,
-    isGameOver: gameStateResult.isGameOver,
-    isGameWon: gameStateResult.isGameWon,
-  };
-  const refetchGameState = gameStateResult.refetch;
-  const collectionStats = useCollectionStats(collection.id);
 
-  // DEBUG: Log daily character for testing
+  // New secure game hook
+  const {
+    hasWonToday,
+    attemptsToday,
+    guesses,
+    dailyCharacter,
+    isLoading,
+    error: gameError,
+    isGuessPending,
+    currentDay,
+    submitGuess,
+    clearError,
+    refresh,
+  } = useSecureGame(collection);
+
+  // Compute game state from secure hook
+  const gameState = {
+    collectionId: collection.id,
+    dailyCharacter,
+    attempts: attemptsToday,
+    guesses,
+    isGameOver: hasWonToday,
+    isGameWon: hasWonToday,
+  };
+
+  // Read collection stats from contract
+  const { data: userWins } = useReadContract({
+    address: CONTRACT_ADDRESS,
+    abi: statsAbi,
+    functionName: "winsPerCollection",
+    args: address ? [address, BigInt(collection.id)] : undefined,
+    chainId: APP_CHAIN_ID,
+    query: { enabled: !!address && !!CONTRACT_ADDRESS },
+  });
+
+  const { data: winnersToday } = useReadContract({
+    address: CONTRACT_ADDRESS,
+    abi: statsAbi,
+    functionName: "winsPerDayPerCollection",
+    args: [BigInt(collection.id), BigInt(currentDay)],
+    chainId: APP_CHAIN_ID,
+    query: { enabled: !!CONTRACT_ADDRESS },
+  });
+
+  const { data: totalWinners } = useReadContract({
+    address: CONTRACT_ADDRESS,
+    abi: statsAbi,
+    functionName: "globalTotalWins",
+    chainId: APP_CHAIN_ID,
+    query: { enabled: !!CONTRACT_ADDRESS },
+  });
+
+  const collectionStats = {
+    userWins: userWins ? Number(userWins) : 0,
+    winnersToday: winnersToday ? Number(winnersToday) : 0,
+    totalWinners: totalWinners ? Number(totalWinners) : 0,
+  };
+
+  // Combined error message
+  const errorMessage = localErrorMessage || gameError;
+
+  // DEBUG: Log daily character for testing (only shown when won)
   useEffect(() => {
-    if (gameState.dailyCharacter) {
-      console.log("🎯 DAILY CHARACTER (for testing):", {
+    if (gameState.dailyCharacter && hasWonToday) {
+      console.log("🎯 DAILY CHARACTER (revealed after win):", {
         id: gameState.dailyCharacter.id,
         name: gameState.dailyCharacter.name,
         collectionId: collection.id,
         collectionName: collection.name,
       });
     }
-  }, [gameState.dailyCharacter, collection.id, collection.name]);
+  }, [gameState.dailyCharacter, hasWonToday, collection.id, collection.name]);
 
   // Vérifier que la collection existe dans le contrat
-  const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}` || "0x0000000000000000000000000000000000000000";
   const { data: collectionExists } = useReadContract({
     address: CONTRACT_ADDRESS,
-    abi: [
-      {
-        inputs: [{ name: "_collectionId", type: "uint256" }],
-        name: "collectionExists",
-        outputs: [{ name: "", type: "bool" }],
-        stateMutability: "view",
-        type: "function",
-      },
-    ],
+    abi: statsAbi,
     functionName: "collectionExists",
     args: [BigInt(collection.id)],
+    chainId: APP_CHAIN_ID,
     query: {
-      enabled: !!collection.id && CONTRACT_ADDRESS !== "0x0000000000000000000000000000000000000000",
+      enabled: !!collection.id && !!CONTRACT_ADDRESS,
     },
   });
 
@@ -220,59 +270,64 @@ export function GameBoard({ collection }: GameBoardProps) {
 
   const handleGuess = async () => {
     if (!selectedCharacterId || !canPlay) return;
-    
+
     // Vérifier que la collection existe dans le contrat
     if (collectionExists === false) {
-      setErrorMessage(`Collection ${collection.id} does not exist in the contract. Please initialize it first with the initialize.ts script`);
+      setLocalErrorMessage(`Collection ${collection.id} does not exist in the contract. Please initialize it first.`);
       return;
     }
-    
+
     // Vérifier si ce personnage a déjà été deviné
     if (alreadyGuessed(selectedCharacterId)) {
-      setErrorMessage("You have already guessed this character today.");
+      setLocalErrorMessage("You have already guessed this character today.");
       return;
     }
 
     // Réinitialiser l'erreur
-    setErrorMessage(null);
+    setLocalErrorMessage(null);
+    clearError();
 
     try {
-      // Lancer la transaction
-      await makeGuess(collection.id, selectedCharacterId);
-      
+      // Submit guess using secure system
+      const result = await submitGuess(selectedCharacterId);
+
       // Réinitialiser la sélection immédiatement pour éviter les doubles clics
       setSelectedCharacterId(null);
       setSelectedCharacterName(undefined);
       setSelectedCharacterImage(undefined);
-      
-      // Ne pas afficher le résultat maintenant - attendre la confirmation
-      // Le résultat sera mis à jour automatiquement via useGameState après confirmation
+
+      // Le résultat sera mis à jour via le hook après confirmation de la transaction
+      if (!result) {
+        // Error is already set in the hook
+        return;
+      }
     } catch (err: unknown) {
       console.error("Error making guess:", err);
       const errorObj = err as { message?: string };
       let errorMsg = errorObj?.message || String(err) || "An error occurred during submission.";
-      
+
       // Messages d'erreur plus clairs
       if (errorMsg.includes("Collection does not exist") || errorMsg.includes("Collection has no characters")) {
-        errorMsg = `Collection ${collection.id} is not initialized in the contract. Please run the initialize.ts script first.`;
+        errorMsg = `Collection ${collection.id} is not initialized in the contract.`;
       } else if (errorMsg.includes("execution reverted") || errorMsg.includes("revert")) {
         errorMsg = "Transaction failed. Check that the collection is properly initialized in the contract.";
+      } else if (errorMsg.includes("Session not initialized")) {
+        errorMsg = "Session not initialized. Please try again.";
       }
-      
-      setErrorMessage(errorMsg);
+
+      setLocalErrorMessage(errorMsg);
     }
   };
 
-  // Afficher les erreurs de transaction
+  // Afficher les erreurs de jeu
   useEffect(() => {
-    if (error) {
-      const errorMsg = error.message || String(error) || "Transaction error";
-      setErrorMessage(errorMsg);
-    } else if (!isPending && !isConfirming) {
-      // Réinitialiser l'erreur quand la transaction est terminée
-      setErrorMessage(null);
+    if (gameError) {
+      setLocalErrorMessage(gameError);
+    } else if (!isLoading && !isGuessPending) {
+      // Réinitialiser l'erreur locale quand le chargement est terminé
+      setLocalErrorMessage(null);
     }
-  }, [error, isPending, isConfirming]);
+  }, [gameError, isLoading, isGuessPending]);
 
   // Initialiser les colonnes révélées pour les propositions existantes au chargement
   // On révèle immédiatement toutes les propositions sauf la dernière (qui sera animée si c'est un nouveau guess)
@@ -324,17 +379,17 @@ export function GameBoard({ collection }: GameBoardProps) {
     }
   }, [gameState.guesses, fullyRevealedGuesses]);
 
-  // Rafraîchir l'état du jeu après confirmation de la transaction
+  // Rafraîchir l'état du jeu périodiquement si une transaction est en attente
   useEffect(() => {
-    if (isConfirmed) {
-      // Attendre un peu pour que la transaction soit propagée sur le réseau
+    if (isGuessPending) {
+      // Rafraîchir après que la transaction soit confirmée
       const timeout = setTimeout(() => {
-        refetchGameState();
-      }, 2000); // 2 secondes de délai pour la propagation
-      
+        refresh();
+      }, 3000);
+
       return () => clearTimeout(timeout);
     }
-  }, [isConfirmed, refetchGameState]);
+  }, [isGuessPending, refresh]);
 
   // Détecter quand un nouveau guess est ajouté et animer uniquement celui-là
   useEffect(() => {
@@ -515,7 +570,7 @@ export function GameBoard({ collection }: GameBoardProps) {
                   <CharacterSelector
                     characters={collection.characters || []}
                     onSelect={handleCharacterSelect}
-                    disabled={isPending || isConfirming || gameState.isGameOver || !isConnected}
+                    disabled={isLoading || isGuessPending || gameState.isGameOver || !isConnected}
                     disabledCharacters={gameState.guesses.map(g => g.characterId)}
                   />
                 </div>
@@ -529,15 +584,15 @@ export function GameBoard({ collection }: GameBoardProps) {
                       onClick={handleGuess}
                       disabled={
                         !selectedCharacterId ||
-                        isPending ||
-                        isConfirming ||
+                        isLoading ||
+                        isGuessPending ||
                         gameState.isGameOver ||
                         alreadyGuessed(selectedCharacterId)
                       }
                       className="!h-12 !w-12 !p-0 !px-0 !py-0 flex items-center justify-center"
                       aria-label="Submit guess"
                     >
-                      {isPending || isConfirming ? (
+                      {isLoading || isGuessPending ? (
                         <Loader2 className="w-5 h-5 animate-spin" />
                       ) : (
                         <Send className="w-5 h-5" />
@@ -567,7 +622,7 @@ export function GameBoard({ collection }: GameBoardProps) {
                 </div>
               )}
 
-              {(isPending || isConfirming) && (
+              {(isLoading || isGuessPending) && (
                 <div className="mt-3 sm:mt-4 text-center text-muted-foreground">
                   <p>Transaction in progress...</p>
                   <p className="text-sm">Please wait while your guess is being confirmed.</p>
@@ -672,6 +727,7 @@ export function GameBoard({ collection }: GameBoardProps) {
         winnersToday={collectionStats.winnersToday}
         totalWinners={collectionStats.totalWinners}
       />
+      <Footer />
     </div>
   );
 }

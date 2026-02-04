@@ -3,15 +3,15 @@
 import { useEffect, useState, useRef } from "react";
 import { useAccount, useReadContract, useConnect } from "wagmi";
 import { parseAbi } from "viem";
-import { baseSepolia } from "wagmi/chains";
+import { APP_CHAIN_ID } from "@/lib/chain-config";
 import { useMiniKit } from "@coinbase/onchainkit/minikit";
 import { Wallet } from "@coinbase/onchainkit/wallet";
 import { StatCard } from "./StatCard";
 
 const CONTRACT_ABI = parseAbi([
-  "function getTotalWins(address _player) external view returns (uint256)",
-  "function getGlobalTotalWins() external view returns (uint256)",
-  "function getWinnersTodayCount(uint256 _collectionId, uint256 _day) external view returns (uint256)",
+  "function totalWins(address player) external view returns (uint256)",
+  "function globalTotalWins() external view returns (uint256)",
+  "function totalWinsPerDay(uint256 day) external view returns (uint256)",
 ]);
 
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}` || "0x0000000000000000000000000000000000000000";
@@ -113,11 +113,11 @@ function useStatsData() {
   const { data: userTotalWins } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: CONTRACT_ABI,
-    functionName: "getTotalWins",
-    args: [address || "0x0000000000000000000000000000000000000000"],
-    chainId: baseSepolia.id,
+    functionName: "totalWins",
+    args: address ? [address] : undefined,
+    chainId: APP_CHAIN_ID,
     query: {
-      enabled: !!CONTRACT_ADDRESS && CONTRACT_ADDRESS !== "0x0000000000000000000000000000000000000000" && isConnected,
+      enabled: !!CONTRACT_ADDRESS && CONTRACT_ADDRESS !== "0x0000000000000000000000000000000000000000" && isConnected && !!address,
       staleTime: CACHE_TIME,
       refetchOnWindowFocus: false,
       refetchOnMount: false,
@@ -127,8 +127,8 @@ function useStatsData() {
   const { data: globalTotalWins } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: CONTRACT_ABI,
-    functionName: "getGlobalTotalWins",
-    chainId: baseSepolia.id,
+    functionName: "globalTotalWins",
+    chainId: APP_CHAIN_ID,
     query: {
       enabled: !!CONTRACT_ADDRESS && CONTRACT_ADDRESS !== "0x0000000000000000000000000000000000000000",
       staleTime: CACHE_TIME,
@@ -140,9 +140,9 @@ function useStatsData() {
   const { data: winnersTodayCount } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: CONTRACT_ABI,
-    functionName: "getWinnersTodayCount",
-    args: [BigInt(0), BigInt(currentDay)],
-    chainId: baseSepolia.id,
+    functionName: "totalWinsPerDay",
+    args: currentDay > 0 ? [BigInt(currentDay)] : undefined,
+    chainId: APP_CHAIN_ID,
     query: {
       enabled: !!CONTRACT_ADDRESS && CONTRACT_ADDRESS !== "0x0000000000000000000000000000000000000000" && currentDay > 0,
       staleTime: CACHE_TIME,

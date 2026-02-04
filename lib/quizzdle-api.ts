@@ -178,3 +178,60 @@ export function quizzdleImageUrl(path: string | null | undefined): string {
   const p = path.startsWith("/") ? path : `/${path}`;
   return p.startsWith("/img") ? `${base}${p}` : `${base}/img${p.startsWith("/") ? "" : "/"}${p}`;
 }
+
+/**
+ * Filter categories to only include those registered in the smart contract.
+ * This prevents showing games that would fail with "Collection does not exist".
+ */
+export async function filterRegisteredCollections(
+  categories: QuizzdleCategoryRef[]
+): Promise<QuizzdleCategoryRef[]> {
+  if (categories.length === 0) return [];
+
+  const { createPublicClient, http, parseAbi } = await import("viem");
+  const { APP_CHAIN, RPC_URL } = await import("@/lib/chain-config");
+
+  const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}`;
+  if (!CONTRACT_ADDRESS || CONTRACT_ADDRESS === "0x0000000000000000000000000000000000000000") {
+    console.warn("Contract address not configured, showing all categories");
+    return categories;
+  }
+
+  const abi = parseAbi([
+    "function collectionExists(uint256 _collectionId) external view returns (bool)",
+  ]);
+
+  const client = createPublicClient({
+    chain: APP_CHAIN,
+    transport: http(RPC_URL),
+  });
+
+  // Check all collections in parallel
+  const results = await Promise.all(
+    categories.map(async (cat) => {
+      try {
+        const exists = await client.readContract({
+          address: CONTRACT_ADDRESS,
+          abi,
+          functionName: "collectionExists",
+          args: [BigInt(cat.id)],
+        });
+        return { cat, exists };
+      } catch (error) {
+        console.warn(`Failed to check collection ${cat.id}:`, error);
+        return { cat, exists: false };
+      }
+    })
+  );
+
+  const registered = results.filter((r) => r.exists).map((r) => r.cat);
+
+  if (registered.length < categories.length) {
+    const missing = categories.filter((c) => !registered.find((r) => r.id === c.id));
+    console.log(
+      `[Collections] ${registered.length}/${categories.length} registered. Missing: ${missing.map((c) => c.id).join(", ")}`
+    );
+  }
+
+  return registered;
+}

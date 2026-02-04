@@ -1,10 +1,19 @@
 "use client";
-import { useAccount, useDisconnect } from "wagmi";
-import { usePlayerStats, useGlobalTotalWins } from "@/hooks/useGame";
+import { useAccount, useDisconnect, useReadContract } from "wagmi";
+import { parseAbi } from "viem";
+import { APP_CHAIN_ID } from "@/lib/chain-config";
 import { WalletButton } from "./WalletButton";
 import { Button } from "./Button";
 import { StatCard } from "./StatCard";
 import Link from "next/link";
+
+// Contract configuration
+const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}`;
+
+const statsAbi = parseAbi([
+  "function totalWins(address player) external view returns (uint256)",
+  "function globalTotalWins() external view returns (uint256)",
+]);
 
 // Icons matching the footer style
 const TrophyIcon = () => (
@@ -85,8 +94,28 @@ interface GameHeaderProps {
 export function GameHeader({ className }: GameHeaderProps) {
   const { address, isConnected } = useAccount();
   const { disconnect } = useDisconnect();
-  const { totalWins } = usePlayerStats(address);
-  const { globalTotalWins } = useGlobalTotalWins();
+
+  // Read player's total wins from contract
+  const { data: totalWinsData } = useReadContract({
+    address: CONTRACT_ADDRESS,
+    abi: statsAbi,
+    functionName: "totalWins",
+    args: address ? [address] : undefined,
+    chainId: APP_CHAIN_ID,
+    query: { enabled: !!address && !!CONTRACT_ADDRESS },
+  });
+
+  // Read global total wins from contract
+  const { data: globalTotalWinsData } = useReadContract({
+    address: CONTRACT_ADDRESS,
+    abi: statsAbi,
+    functionName: "globalTotalWins",
+    chainId: APP_CHAIN_ID,
+    query: { enabled: !!CONTRACT_ADDRESS },
+  });
+
+  const totalWins = totalWinsData ? Number(totalWinsData) : 0;
+  const globalTotalWins = globalTotalWinsData ? Number(globalTotalWinsData) : 0;
 
   return (
     <header className={`w-full sticky top-0 z-50 px-2 sm:px-4 py-4 ${className ?? ""}`.trim()}>

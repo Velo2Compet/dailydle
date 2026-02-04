@@ -2,7 +2,7 @@
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useChainId, useSwitchChain } from "wagmi";
 import { useCallback } from "react";
 import { parseAbi } from "viem";
-import { baseSepolia } from "wagmi/chains";
+import { APP_CHAIN_ID } from "@/lib/chain-config";
 
 // Cache settings
 const CACHE_TIME = 30 * 1000; // 30 seconds
@@ -39,9 +39,9 @@ export function useSendGm() {
     }
 
     // Vérifier et forcer Base Sepolia
-    if (chainId !== baseSepolia.id) {
+    if (chainId !== APP_CHAIN_ID) {
       try {
-        await switchChain({ chainId: baseSepolia.id });
+        await switchChain({ chainId: APP_CHAIN_ID });
         await new Promise(resolve => setTimeout(resolve, 500));
       } catch {
         throw new Error("Please switch to Base Sepolia network");
@@ -52,7 +52,7 @@ export function useSendGm() {
       address: GM_CONTRACT_ADDRESS,
       abi: GM_CONTRACT_ABI,
       functionName: "gm",
-      chainId: baseSepolia.id,
+      chainId: APP_CHAIN_ID,
     });
   }, [writeContract, address, chainId, switchChain]);
 
@@ -77,7 +77,7 @@ export function useGmStats() {
     abi: GM_CONTRACT_ABI,
     functionName: "getPlayerStats",
     args: address ? [address] : undefined,
-    chainId: baseSepolia.id,
+    chainId: APP_CHAIN_ID,
     query: {
       enabled: !!address && isConnected && GM_CONTRACT_ADDRESS !== "0x0000000000000000000000000000000000000000",
       staleTime: CACHE_TIME,
@@ -89,7 +89,7 @@ export function useGmStats() {
     address: GM_CONTRACT_ADDRESS,
     abi: GM_CONTRACT_ABI,
     functionName: "getGlobalStats",
-    chainId: baseSepolia.id,
+    chainId: APP_CHAIN_ID,
     query: {
       enabled: GM_CONTRACT_ADDRESS !== "0x0000000000000000000000000000000000000000",
       staleTime: CACHE_TIME,

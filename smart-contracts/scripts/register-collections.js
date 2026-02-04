@@ -2,15 +2,10 @@ const { ethers } = require("hardhat");
 require("dotenv").config({ path: ".env.local" });
 
 /**
- * Script intelligent pour gérer les collections
+ * Script pour enregistrer les collections sur Quizzdle
  *
- * Fonctionnalités:
- * - Enregistre les nouvelles collections
- * - Détecte automatiquement les changements (ajout/suppression de personnages)
- * - Met à jour les collections modifiées
- * - Skip les collections inchangées
- * - Gère correctement les nonces et les erreurs
- * - Peut être relancé sans problème
+ * Le contrat salted stocke seulement si une collection existe (collectionExists[id])
+ * Pas besoin des character IDs on-chain - ils sont gérés par l'API
  *
  * Usage: npx hardhat run smart-contracts/scripts/register-collections.js --network base-sepolia
  */
@@ -35,23 +30,9 @@ async function fetchCategories() {
   return Array.isArray(raw) ? raw : [];
 }
 
-function arraysEqual(arr1, arr2) {
-  if (arr1.length !== arr2.length) return false;
-
-  // Convert BigInts to numbers and sort for comparison
-  const a1 = arr1.map(x => Number(x)).sort((a, b) => a - b);
-  const a2 = arr2.map(x => Number(x)).sort((a, b) => a - b);
-
-  for (let i = 0; i < a1.length; i++) {
-    if (a1[i] !== a2[i]) return false;
-  }
-
-  return true;
-}
-
 async function main() {
-  console.log("📝 REGISTER & UPDATE COLLECTIONS");
-  console.log("=" .repeat(60));
+  console.log("📝 REGISTER COLLECTIONS ON QUIZZDLE");
+  console.log("=".repeat(60));
 
   const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS;
 
@@ -69,138 +50,74 @@ async function main() {
   console.log("👤 Deployer:", deployer.address);
   console.log("📋 Contract:", contractAddress);
 
-  const Quizzdle = await ethers.getContractFactory("Quizzdle");
-  const dailydle = Quizzdle.attach(contractAddress).connect(deployer);
+  const contract = await ethers.getContractAt("Quizzdle", contractAddress);
 
-  // Fetch categories
+  // Fetch categories from API
   console.log("\n📥 Fetching categories from Quizzdle API...");
   const categories = await fetchCategories();
   console.log(`✅ Found ${categories.length} categories\n`);
 
-  // Prepare collections data
-  const collections = [];
-  for (const category of categories) {
-    const characterIdsList = category.ids_personnages_list;
-    if (!characterIdsList || !Array.isArray(characterIdsList) || characterIdsList.length === 0) {
-      console.log(`⚠️  Skipping ${category.name} (no characters)`);
-      continue;
-    }
+  // Get all collection IDs
+  const collectionIds = categories
+    .filter(c => c.ids_personnages_list && c.ids_personnages_list.length > 0)
+    .map(c => ({ id: c.id, name: c.name }));
 
-    const characterIds = characterIdsList.map(id => BigInt(id));
-    collections.push({
-      id: BigInt(category.id),
-      name: category.name,
-      characterIds,
-    });
-  }
+  console.log(`📋 Processing ${collectionIds.length} collections\n`);
+  console.log("=".repeat(60));
 
-  console.log(`📋 Processing ${collections.length} collections\n`);
-  console.log("=" .repeat(60));
-
-  // Register/Update collections one by one with proper waiting
-  let newCount = 0;
-  let updatedCount = 0;
-  let unchangedCount = 0;
+  let addedCount = 0;
+  let existingCount = 0;
   let failCount = 0;
 
-  for (let i = 0; i < collections.length; i++) {
-    const collection = collections[i];
-    const collectionNum = Number(collection.id);
+  for (let i = 0; i < collectionIds.length; i++) {
+    const { id, name } = collectionIds[i];
 
-    console.log(`\n[${i + 1}/${collections.length}] Collection ${collectionNum}: ${collection.name}`);
-    console.log(`   📊 API: ${collection.characterIds.length} characters`);
+    console.log(`\n[${i + 1}/${collectionIds.length}] Collection ${id}: ${name}`);
 
     try {
-      // Get existing IDs from contract
-      const existingIds = await dailydle.getCollectionCharacterIds(collection.id);
+      // Check if collection already exists
+      const exists = await contract.collectionExists(id);
 
-      let needsUpdate = false;
-      let isNew = false;
-
-      if (existingIds.length === 0) {
-        // New collection
-        console.log(`   ✨ NEW - needs registration`);
-        needsUpdate = true;
-        isNew = true;
-      } else {
-        // Existing collection - check for changes
-        console.log(`   📦 Contract: ${existingIds.length} characters`);
-
-        const hasChanges = !arraysEqual(existingIds, collection.characterIds);
-
-        if (!hasChanges) {
-          console.log(`   ✅ No changes - skipping`);
-          unchangedCount++;
-        } else {
-          console.log(`   🔄 Changes detected - needs update`);
-          needsUpdate = true;
-        }
+      if (exists) {
+        console.log(`   ✅ Already exists - skipping`);
+        existingCount++;
+        continue;
       }
 
-      if (needsUpdate) {
-        // Get fresh fee data
-        const feeData = await ethers.provider.getFeeData();
+      // Add collection
+      console.log(`   ✨ Adding collection...`);
+      const tx = await contract.addCollection(id);
+      console.log(`   📤 TX: ${tx.hash}`);
 
-        // Send transaction (let ethers.js manage the nonce automatically)
-        console.log(`   🚀 Sending transaction...`);
-        const tx = await dailydle.updateCollectionCharacterIds(
-          collection.id,
-          collection.characterIds,
-          {
-            maxFeePerGas: feeData.maxFeePerGas,
-            maxPriorityFeePerGas: feeData.maxPriorityFeePerGas,
-            // No manual nonce - let ethers.js handle it
-          }
-        );
+      await tx.wait();
+      console.log(`   ✅ Added!`);
+      addedCount++;
 
-        console.log(`   📤 TX: ${tx.hash}`);
-        console.log(`   ⏳ Waiting for confirmation...`);
-
-        // Wait for confirmation with timeout
-        const receipt = await tx.wait(1, 60000); // 1 confirmation, 60s timeout
-
-        console.log(`   ✅ ${isNew ? 'Registered' : 'Updated'} in block ${receipt.blockNumber}`);
-        console.log(`   ⛽ Gas used: ${receipt.gasUsed.toString()}`);
-
-        if (isNew) {
-          newCount++;
-        } else {
-          updatedCount++;
-        }
-      }
-
-      // Wait 3 seconds before next transaction to ensure nonce is updated
-      if (needsUpdate && i < collections.length - 1) {
-        console.log(`   ⏸️  Waiting 3 seconds before next transaction...`);
-        await new Promise(resolve => setTimeout(resolve, 3000));
+      // Wait between transactions
+      if (i < collectionIds.length - 1) {
+        await new Promise(r => setTimeout(r, 2000));
       }
 
     } catch (error) {
       console.error(`   ❌ Failed:`, error.message.split('\n')[0]);
       failCount++;
-
-      // Wait 5 seconds after any error
-      console.log(`   ⏸️  Waiting 5 seconds before continuing...`);
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await new Promise(r => setTimeout(r, 3000));
     }
   }
 
   // Summary
-  console.log("\n" + "=" .repeat(60));
+  console.log("\n" + "=".repeat(60));
   console.log("📊 SUMMARY");
-  console.log("=" .repeat(60));
-  console.log(`✨ New collections registered: ${newCount}`);
-  console.log(`🔄 Collections updated: ${updatedCount}`);
-  console.log(`✅ Collections unchanged: ${unchangedCount}`);
+  console.log("=".repeat(60));
+  console.log(`✨ Collections added: ${addedCount}`);
+  console.log(`✅ Already existed: ${existingCount}`);
   console.log(`❌ Failed: ${failCount}`);
-  console.log(`📋 Total: ${collections.length}`);
+  console.log(`📋 Total: ${collectionIds.length}`);
 
   if (failCount > 0) {
-    console.log(`\n⚠️  Some collections failed. You can re-run this script to retry.`);
-  } else if (newCount > 0 || updatedCount > 0) {
-    console.log(`\n✅ All changes applied successfully!`);
+    console.log(`\n⚠️  Some collections failed. Re-run to retry.`);
   } else {
-    console.log(`\n✅ All collections are up to date!`);
+    console.log(`\n✅ All collections registered!`);
   }
 }
 

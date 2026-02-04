@@ -2,7 +2,7 @@
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useChainId, useSwitchChain } from "wagmi";
 import { useCallback } from "react";
 import { parseAbi } from "viem";
-import { baseSepolia } from "wagmi/chains";
+import { APP_CHAIN_ID } from "@/lib/chain-config";
 
 const CACHE_TIME = 30 * 1000; // 30 seconds
 
@@ -22,8 +22,8 @@ const REFERAL_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_REFERAL_CONTRACT_ADDRES
 const GAME_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}` || "0x0000000000000000000000000000000000000000";
 
 const REFERRAL_REWARDS_ABI = parseAbi([
-  "function pendingReferralRewards(address _user) external view returns (uint256)",
-  "function getTotalReferralEarned(address _user) external view returns (uint256)",
+  "function referralRewards(address user) external view returns (uint256)",
+  "function totalReferralEarned(address user) external view returns (uint256)",
   "function claimReferralRewards() external",
 ]);
 
@@ -44,9 +44,9 @@ export function useSetReferralCode() {
       throw new Error("Wallet not connected");
     }
 
-    if (chainId !== baseSepolia.id) {
+    if (chainId !== APP_CHAIN_ID) {
       try {
-        await switchChain({ chainId: baseSepolia.id });
+        await switchChain({ chainId: APP_CHAIN_ID });
         await new Promise(resolve => setTimeout(resolve, 500));
       } catch {
         throw new Error("Please switch to Base Sepolia network");
@@ -58,7 +58,7 @@ export function useSetReferralCode() {
       abi: REFERAL_CONTRACT_ABI,
       functionName: "setReferralCode",
       args: [code],
-      chainId: baseSepolia.id,
+      chainId: APP_CHAIN_ID,
     });
   }, [writeContract, address, chainId, switchChain]);
 
@@ -89,9 +89,9 @@ export function useRegisterWithReferral() {
       throw new Error("Wallet not connected");
     }
 
-    if (chainId !== baseSepolia.id) {
+    if (chainId !== APP_CHAIN_ID) {
       try {
-        await switchChain({ chainId: baseSepolia.id });
+        await switchChain({ chainId: APP_CHAIN_ID });
         await new Promise(resolve => setTimeout(resolve, 500));
       } catch {
         throw new Error("Please switch to Base Sepolia network");
@@ -103,7 +103,7 @@ export function useRegisterWithReferral() {
       abi: REFERAL_CONTRACT_ABI,
       functionName: "registerWithReferral",
       args: [referralCode],
-      chainId: baseSepolia.id,
+      chainId: APP_CHAIN_ID,
     });
   }, [writeContract, address, chainId, switchChain]);
 
@@ -128,7 +128,7 @@ export function useReferalStats() {
     abi: REFERAL_CONTRACT_ABI,
     functionName: "getUserStats",
     args: address ? [address] : undefined,
-    chainId: baseSepolia.id,
+    chainId: APP_CHAIN_ID,
     query: {
       enabled: !!address && isConnected && REFERAL_CONTRACT_ADDRESS !== "0x0000000000000000000000000000000000000000",
       staleTime: CACHE_TIME,
@@ -140,7 +140,7 @@ export function useReferalStats() {
     address: REFERAL_CONTRACT_ADDRESS,
     abi: REFERAL_CONTRACT_ABI,
     functionName: "getGlobalStats",
-    chainId: baseSepolia.id,
+    chainId: APP_CHAIN_ID,
     query: {
       enabled: REFERAL_CONTRACT_ADDRESS !== "0x0000000000000000000000000000000000000000",
       staleTime: CACHE_TIME,
@@ -177,7 +177,7 @@ export function useIsCodeAvailable(code: string) {
     abi: REFERAL_CONTRACT_ABI,
     functionName: "isCodeAvailable",
     args: [code],
-    chainId: baseSepolia.id,
+    chainId: APP_CHAIN_ID,
     query: {
       enabled: code.length >= 3 && REFERAL_CONTRACT_ADDRESS !== "0x0000000000000000000000000000000000000000",
       staleTime: 5000,
@@ -198,9 +198,9 @@ export function useReferralRewards() {
   const { data: pendingRewards, refetch: refetchRewards } = useReadContract({
     address: GAME_CONTRACT_ADDRESS,
     abi: REFERRAL_REWARDS_ABI,
-    functionName: "pendingReferralRewards",
+    functionName: "referralRewards",
     args: address ? [address] : undefined,
-    chainId: baseSepolia.id,
+    chainId: APP_CHAIN_ID,
     query: {
       enabled,
       staleTime: CACHE_TIME,
@@ -211,9 +211,9 @@ export function useReferralRewards() {
   const { data: totalEarned, refetch: refetchTotalEarned } = useReadContract({
     address: GAME_CONTRACT_ADDRESS,
     abi: REFERRAL_REWARDS_ABI,
-    functionName: "getTotalReferralEarned",
+    functionName: "totalReferralEarned",
     args: address ? [address] : undefined,
-    chainId: baseSepolia.id,
+    chainId: APP_CHAIN_ID,
     query: {
       enabled,
       staleTime: CACHE_TIME,
@@ -245,9 +245,9 @@ export function useClaimReferralRewards() {
       throw new Error("Wallet not connected");
     }
 
-    if (chainId !== baseSepolia.id) {
+    if (chainId !== APP_CHAIN_ID) {
       try {
-        await switchChain({ chainId: baseSepolia.id });
+        await switchChain({ chainId: APP_CHAIN_ID });
         await new Promise(resolve => setTimeout(resolve, 500));
       } catch {
         throw new Error("Please switch to Base Sepolia network");
@@ -258,7 +258,7 @@ export function useClaimReferralRewards() {
       address: GAME_CONTRACT_ADDRESS,
       abi: REFERRAL_REWARDS_ABI,
       functionName: "claimReferralRewards",
-      chainId: baseSepolia.id,
+      chainId: APP_CHAIN_ID,
     });
   }, [writeContract, address, chainId, switchChain]);
 

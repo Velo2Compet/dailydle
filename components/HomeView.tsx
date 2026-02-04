@@ -5,6 +5,7 @@ import { useMiniKit } from "@coinbase/onchainkit/minikit";
 import Link from "next/link";
 import { StatsHeader } from "@/components/StatsHeader";
 import { GmStreakCard } from "@/components/GmStreakCard";
+import { Footer } from "@/components/Footer";
 import type { QuizzdleCategoryRef } from "@/lib/quizzdle-api";
 import { quizzdleImageUrl } from "@/lib/quizzdle-api";
 import styles from "@/app/page.module.css";
@@ -98,6 +99,7 @@ export function HomeView({ categories }: HomeViewProps) {
           )}
         </div>
       </main>
+      <Footer />
     </div>
   );
 }
