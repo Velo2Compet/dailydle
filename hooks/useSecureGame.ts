@@ -44,7 +44,7 @@ export interface SecureGameState {
  * One signature per day for all collections (better UX)
  */
 function getSessionMessage(day: number): string {
-  return `Dailydle Session Authentication\nDay: ${day}\nSign to play securely.`;
+  return `Quizzdle Onchain Session Authentication\nDay: ${day}\nSign to play securely.`;
 }
 
 /**
@@ -52,11 +52,11 @@ function getSessionMessage(day: number): string {
  * Session is shared across all collections for the same day
  */
 function getSessionStorageKey(address: string, day: number): string {
-  return `dailydle-session-${address.toLowerCase()}-${day}`;
+  return `quizzdle-session-${address.toLowerCase()}-${day}`;
 }
 
 function getGuessesStorageKey(address: string, collectionId: number, day: number): string {
-  return `dailydle-guesses-${address.toLowerCase()}-${collectionId}-${day}`;
+  return `quizzdle-guesses-${address.toLowerCase()}-${collectionId}-${day}`;
 }
 
 /**

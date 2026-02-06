@@ -18,23 +18,23 @@ export const minikitConfig = {
   },
   miniapp: {
     version: "1",
-    name: "Dailydle", 
-    subtitle: "Daily guess characters game", 
-    description: "Daily guess characters from famous games, movies, TV shows, and more",
-    screenshotUrls: [`${ROOT_URL}/logo-farcaster.png`],
-    iconUrl: `${ROOT_URL}/logo-farcaster.png`, // Utiliser le logo comme icône
-    splashImageUrl: `${ROOT_URL}/logo-farcaster.png`,
-    splashBackgroundColor: "#000000",
+    name: "Quizzdle Onchain",
+    iconUrl: `${ROOT_URL}/logo-farcaster.png`,
     homeUrl: ROOT_URL,
+    imageUrl: `${ROOT_URL}/logo-farcaster.png`,
+    buttonTitle: "Play Quizzdle",
+    splashImageUrl: `${ROOT_URL}/logo-farcaster.png`,
+    splashBackgroundColor: "#8b5cf6",
     webhookUrl: `${ROOT_URL}/api/webhook`,
-    primaryCategory: "social",
-    tags: ["game", "daily", "guess", "characters", "onchain"],
-    heroImageUrl: `${ROOT_URL}/logo-farcaster.png`,
-    tagline: "Guess the character of the day!", // max 30 chars
-    ogTitle: "Dailydle - Daily Character Guess", // max 30 chars
-    ogDescription: "Guess the daily mystery character from games, movies & TV. Built on Base.", // max 100 chars
+    subtitle: "Daily guessing games",
+    description: "Daily guess characters from famous games, movies, TV shows, and more",
+    primaryCategory: "games",
+    screenshotUrls: [`${ROOT_URL}/preview.jpg`],
+    heroImageUrl: `${ROOT_URL}/hero-banner.jpg`,
+    tags: ["game", "daily", "guessing", "quizzdle", "onchain"],
+    ogDescription: "Daily guessing games",
     ogImageUrl: `${ROOT_URL}/logo-farcaster.png`,
-    noindex: false, // true = exclude from search, false = include (default)
+    ogTitle: "Quizzdle Onchain",
   },
 } as const;
 

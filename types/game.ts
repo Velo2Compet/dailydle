@@ -1,5 +1,5 @@
 /**
- * Types pour le jeu Dailydle
+ * Types pour le jeu Quizzdle Onchain
  */
 
 export interface Attribute {

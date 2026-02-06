@@ -88,7 +88,7 @@ export function computeDailyCharacterId(
  * One signature per day for all collections (better UX)
  */
 export function getSessionMessage(day: number): string {
-  return `Dailydle Session Authentication\nDay: ${day}\nSign to play securely.`;
+  return `Quizzdle Onchain Session Authentication\nDay: ${day}\nSign to play securely.`;
 }
 
 /**

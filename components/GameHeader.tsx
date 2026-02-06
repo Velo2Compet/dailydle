@@ -140,7 +140,7 @@ export function GameHeader({ className }: GameHeaderProps) {
           <Link href="/" className="flex items-center">
             <img
               src="/logo.png"
-              alt="Dailydle Logo"
+              alt="Quizzdle Onchain Logo"
               className="w-16 sm:w-24 md:w-32 h-auto object-contain"
             />
           </Link>

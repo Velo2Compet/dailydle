@@ -25,7 +25,7 @@ const SERVER_PRIVATE_KEY = process.env.SERVER_PRIVATE_KEY;
  * One signature per day for all collections
  */
 function getSessionMessage(day) {
-  return `Dailydle Session Authentication\nDay: ${day}\nSign to play securely.`;
+  return `Quizzdle Onchain Session Authentication\nDay: ${day}\nSign to play securely.`;
 }
 
 /**
@@ -74,7 +74,7 @@ async function signCommitment(serverWallet, playerAddress, collectionId, day, co
 }
 
 async function main() {
-  console.log("🎮 DAILYDLE - TEST JOUR 1 (Système Salted)");
+  console.log("🎮 Quizzdle Onchain - TEST JOUR 1 (Système Salted)");
   console.log("=".repeat(70));
 
   // Validate env

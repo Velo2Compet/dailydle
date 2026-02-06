@@ -8,7 +8,7 @@ import type {
 import { quizzdleImageUrl } from "@/lib/quizzdle-api";
 
 /**
- * Transforme une catégorie Quizzdle (API) en Collection Dailydle.
+ * Transforme une catégorie Quizzdle (API) en Collection Quizzdle Onchain.
  */
 export function quizzdleCategoryToCollection(
   raw: QuizzdleCategoryFull

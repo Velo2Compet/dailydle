@@ -6,8 +6,8 @@
  * are being used from the same device.
  */
 
-const DEVICE_ID_KEY = "dailydle-device-id";
-const WALLETS_KEY = "dailydle-known-wallets";
+const DEVICE_ID_KEY = "quizzdle-device-id";
+const WALLETS_KEY = "quizzdle-known-wallets";
 
 /**
  * Generate a random device ID

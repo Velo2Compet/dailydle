@@ -298,8 +298,8 @@ export function ProfileView() {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: "Dailydle",
-          text: "Join me on Dailydle! Guess the daily character and build your streak.",
+          title: "Quizzdle Onchain",
+          text: "Join me on Quizzdle Onchain! Guess the daily character and build your streak.",
           url: shareUrl,
         });
       } catch {
