@@ -14,3 +14,25 @@
 .error {
   color: #fca5a5;
 }
+
+.error p {
+  margin: 0 0 0.75rem;
+}
+
+.error code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0.15em 0.4em;
+  border-radius: 0.25rem;
+  font-size: 0.9em;
+}
+
+.error a {
+  display: inline-block;
+  margin-top: 1rem;
+  color: #93c5fd;
+  text-decoration: none;
+}
+
+.error a:hover {
+  text-decoration: underline;
+}

@@ -1,5 +1,5 @@
 /**
- * Types pour le jeu Dailydle
+ * Types pour le jeu Quizzdle Onchain
  */
 
 export interface Attribute {
@@ -18,10 +18,11 @@ export interface Character {
 export interface Collection {
   id: number;
   name: string;
+  slug?: string;
   color?: string;
   bgImage?: string;
   attributes: Attribute[];
-  characters: Character[];
+  characters?: Character[];
 }
 
 export interface AttributeComparison {
@@ -38,6 +39,7 @@ export interface GuessResult {
   attempts: number;
   characterId: number;
   characterName: string;
+  characterImage?: string;
   comparisons: AttributeComparison[];
   timestamp: number;
 }

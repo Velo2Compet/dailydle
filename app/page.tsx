@@ -1,32 +1,9 @@
-"use client";
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useMiniKit } from "@coinbase/onchainkit/minikit";
+import { fetchCategories, filterRegisteredCollections } from "@/lib/quizzdle-api";
+import { HomeView } from "@/components/HomeView";
 
-export default function Home() {
-  const { isFrameReady, setFrameReady } = useMiniKit();
-  const router = useRouter();
-
-  // Initialize the miniapp
-  useEffect(() => {
-    if (!isFrameReady) {
-      setFrameReady();
-    }
-  }, [setFrameReady, isFrameReady]);
-
-  // Rediriger vers la page de jeu
-  useEffect(() => {
-    router.push("/game");
-  }, [router]);
-
-  return (
-    <div style={{ 
-      display: "flex", 
-      justifyContent: "center", 
-      alignItems: "center", 
-      minHeight: "100vh" 
-    }}>
-      <p>Redirecting to game...</p>
-    </div>
-  );
+export default async function Home() {
+  const allCategories = await fetchCategories();
+  // Only show collections that are registered in the smart contract
+  const categories = await filterRegisteredCollections(allCategories);
+  return <HomeView categories={categories} />;
 }

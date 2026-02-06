@@ -2,11 +2,12 @@ import { Collection, Character, AttributeComparison, GuessResult } from "@/types
 import { keccak256, toBytes, stringToBytes } from "viem";
 
 /**
- * Normalise un personnage pour avoir une structure cohérente
- * Les attributs peuvent être directement sur l'objet ou dans character.attributes
+ * Normalise un personnage pour avoir une structure cohérente.
+ * Les attributs peuvent être directement sur l'objet ou dans character.attributes.
+ * Exclut id, name, imageUrl, picture, slug et champs techniques API.
  */
 export function normalizeCharacter(character: any): Character {
-  const excludeKeys = ['id', 'name', 'imageUrl'];
+  const excludeKeys = ['id', 'name', 'imageUrl', 'picture', 'slug', 'createdAt', 'updatedAt', 'attributs', 'type_picture'];
   const attributes: Record<string, string | string[] | number> = {};
   
   // Si character.attributes existe et est un objet, l'utiliser
@@ -37,7 +38,8 @@ export function getDailyCharacter(
   collection: Collection,
   date?: Date
 ): Character | null {
-  if (!collection || !collection.characters || collection.characters.length === 0) {
+  const characters = collection?.characters ?? [];
+  if (characters.length === 0) {
     return null;
   }
 
@@ -46,13 +48,13 @@ export function getDailyCharacter(
     (targetDate.getTime() - new Date(targetDate.getFullYear(), 0, 0).getTime()) /
       86400000
   );
-  
+
   // Seed déterministe : année + jour de l'année + ID de la collection
   const seed = targetDate.getFullYear() * 1000 + dayOfYear + collection.id * 10000;
-  
+
   // Sélectionner un personnage de manière déterministe
-  const characterIndex = seed % collection.characters.length;
-  const rawCharacter = collection.characters[characterIndex];
+  const characterIndex = seed % characters.length;
+  const rawCharacter = characters[characterIndex];
   return normalizeCharacter(rawCharacter);
 }
 
@@ -104,39 +106,49 @@ export function compareAttributes(
   return attributes.map((attr) => {
     const guessValue = normalizedGuess.attributes[attr.name];
     const correctValue = normalizedCorrect.attributes[attr.name];
-    
+
     let isCorrect = false;
     let isPartial = false;
-    
-    if (attr.type === "array") {
-      const guessArray = Array.isArray(guessValue) ? guessValue : [guessValue];
-      const correctArray = Array.isArray(correctValue) ? correctValue : [correctValue];
-      
-      // Vérifier si tous les éléments correspondent
+
+    // Vérifier si l'une des valeurs est un tableau (pour gérer les correspondances partielles)
+    const isGuessArray = Array.isArray(guessValue);
+    const isCorrectArray = Array.isArray(correctValue);
+    const hasArrayValue = isGuessArray || isCorrectArray;
+
+    if (attr.type === "int") {
+      isCorrect = Number(guessValue) === Number(correctValue);
+    } else if (hasArrayValue || attr.type === "array") {
+      // Traiter comme des tableaux pour comparaison (même si une seule valeur)
+      const guessArray = isGuessArray ? guessValue : [guessValue];
+      const correctArray = isCorrectArray ? correctValue : [correctValue];
+
       const guessSet = new Set(guessArray.map((v) => String(v).toLowerCase()));
       const correctSet = new Set(correctArray.map((v) => String(v).toLowerCase()));
-      
+
+      // Vérifier si tous les éléments correspondent exactement
       isCorrect =
         guessSet.size === correctSet.size &&
         [...guessSet].every((v) => correctSet.has(v));
-      
-      // Vérifier si au moins un élément correspond (partiel)
-      isPartial = !isCorrect && [...guessSet].some((v) => correctSet.has(v));
-    } else if (attr.type === "int") {
-      isCorrect = Number(guessValue) === Number(correctValue);
+
+      // Vérifier si au moins un élément en commun (partiel)
+      if (!isCorrect) {
+        const hasOverlap = [...guessSet].some((v) => correctSet.has(v)) ||
+                           [...correctSet].some((v) => guessSet.has(v));
+        isPartial = hasOverlap;
+      }
     } else {
-      // String ou bool
+      // String ou bool simple
       isCorrect =
         String(guessValue).toLowerCase() === String(correctValue).toLowerCase();
     }
-    
+
     return {
       attributeName: attr.name,
       attributeNameFront: attr.nameFront,
       guessValue,
       correctValue,
       isCorrect,
-      isPartial: attr.type === "array" ? isPartial : undefined,
+      isPartial: isPartial || undefined,
     };
   });
 }

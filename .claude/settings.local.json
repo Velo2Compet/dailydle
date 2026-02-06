@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl:*)",
+      "WebFetch(domain:quizzdle.fr)",
+      "Bash(npm run dev:*)",
+      "Bash(timeout:*)",
+      "Bash(npx tsc:*)",
+      "Bash(git check-ignore:*)",
+      "Bash(npx hardhat test:*)",
+      "Bash(npm run build:*)",
+      "Bash(npx hardhat compile:*)",
+      "Bash(npx hardhat run:*)"
+    ]
+  }
+}

@@ -1,18 +1,16 @@
 "use client";
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { Character } from "@/types/game";
 
 interface CharacterSelectorProps {
   characters: Character[];
-  selectedCharacterId: number | null;
-  onSelect: (characterId: number) => void;
+  onSelect: (characterId: number, characterName: string, characterImage?: string) => void;
   disabled?: boolean;
   disabledCharacters?: number[];
 }
 
 export function CharacterSelector({
   characters,
-  selectedCharacterId,
   onSelect,
   disabled = false,
   disabledCharacters = [],
@@ -27,23 +25,18 @@ export function CharacterSelector({
     return disabledCharacters.includes(characterId);
   };
 
-  const normalizeText = (value: string) => {
-    return String(value || "")
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "");
-  };
+  // Recherche locale dans les personnages chargés côté serveur
+  const searchResults = useMemo(() => {
+    if (!searchTerm || searchTerm.length < 1) {
+      return [];
+    }
 
-  const filteredCharacters = useMemo(() => {
-    if (!searchTerm.trim()) return [];
-    const query = normalizeText(searchTerm);
-    return characters.filter((char) => {
-      const lowerName = normalizeText(char.name);
-      const words = lowerName.split(/\s+/);
-      const startsFull = lowerName.startsWith(query);
-      const startsAnyWord = words.some((word) => word.startsWith(query));
-      return (startsFull || startsAnyWord) && !isCharacterDisabled(char.id);
-    }).slice(0, 20);
+    const query = searchTerm.toLowerCase();
+    return characters
+      .filter((c) => c.name.toLowerCase().startsWith(query))
+      .filter((c) => !isCharacterDisabled(c.id))
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .slice(0, 20);
   }, [searchTerm, characters, disabledCharacters]);
 
   useEffect(() => {
@@ -55,9 +48,9 @@ export function CharacterSelector({
     setHighlightedIndex(0);
   }, [searchTerm]);
 
-  const handleSelect = (characterId: number) => {
-    if (isCharacterDisabled(characterId) || disabled) return;
-    onSelect(characterId);
+  const handleSelect = (character: Character) => {
+    if (isCharacterDisabled(character.id) || disabled) return;
+    onSelect(character.id, character.name, character.imageUrl);
     setSearchTerm("");
     setIsDropdownVisible(false);
     inputRef.current?.focus();
@@ -80,7 +73,7 @@ export function CharacterSelector({
     if (!isDropdownVisible) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setHighlightedIndex((index) => Math.min(index + 1, Math.max(filteredCharacters.length - 1, 0)));
+      setHighlightedIndex((index) => Math.min(index + 1, Math.max(searchResults.length - 1, 0)));
     }
     if (event.key === "ArrowUp") {
       event.preventDefault();
@@ -88,14 +81,12 @@ export function CharacterSelector({
     }
     if (event.key === "Enter") {
       event.preventDefault();
-      const selected = filteredCharacters[highlightedIndex] || filteredCharacters[0];
+      const selected = searchResults[highlightedIndex] || searchResults[0];
       if (selected) {
-        handleSelect(selected.id);
+        handleSelect(selected);
       }
     }
   };
-
-  const selectedCharacter = characters.find((c) => c.id === selectedCharacterId);
 
   return (
     <div ref={dropdownRef} className="relative w-full">
@@ -104,23 +95,23 @@ export function CharacterSelector({
           <input
             ref={inputRef}
             type="text"
-            placeholder="Tape un nom d'un personnage"
+            placeholder="Type a character name"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             onKeyDown={handleKeyDown}
-            onFocus={() => setIsDropdownVisible(true)}
+            onFocus={() => searchTerm && setIsDropdownVisible(true)}
             disabled={disabled}
             className="rounded-lg py-2.5 px-4 w-full h-12 bg-white/5 border border-white/10 text-white placeholder:text-muted-foreground/50 outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500/50 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           />
         </div>
       </div>
-      {isDropdownVisible && filteredCharacters.length > 0 && (
+      {isDropdownVisible && searchResults.length > 0 && (
         <div className="absolute bg-gradient-to-br from-[#1a1a2e] to-[#121217] border border-violet-500/30 rounded-xl shadow-2xl z-[9999] w-full mt-2">
           <div className="options max-h-80 overflow-y-auto scrollbar flex flex-col">
-            {filteredCharacters.map((character, index) => {
+            {searchResults.map((character, index) => {
               const isDisabled = isCharacterDisabled(character.id);
               return (
-                <div key={character.id} onClick={() => !isDisabled && handleSelect(character.id)}>
+                <div key={character.id} onClick={() => !isDisabled && handleSelect(character)}>
                   <label
                     className={`flex items-center p-4 cursor-pointer text-white transition-colors ${
                       index === highlightedIndex ? "bg-white/10" : "hover:bg-white/10"
@@ -137,25 +128,13 @@ export function CharacterSelector({
                     </div>
                     <span className="ml-1.5 text-gray-200">
                       {character.name}
-                      {isDisabled && " (déjà deviné)"}
+                      {isDisabled && " (already guessed)"}
                     </span>
                   </label>
                 </div>
               );
             })}
           </div>
-        </div>
-      )}
-      {selectedCharacter && (
-        <div className="mt-4 flex items-center gap-4 p-4 bg-black/20 rounded-lg border border-white/10">
-          {selectedCharacter.imageUrl && (
-            <img
-              src={selectedCharacter.imageUrl}
-              alt={selectedCharacter.name}
-              className="size-16 rounded object-cover border-2 border-violet-500/30"
-            />
-          )}
-          <span className="text-white font-semibold text-lg">{selectedCharacter.name}</span>
         </div>
       )}
     </div>

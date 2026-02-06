@@ -1,67 +1,258 @@
 "use client";
-import { useState, useEffect } from "react";
-import { useAccount } from "wagmi";
+import { useState, useEffect, useRef } from "react";
+import { useAccount, useReadContract } from "wagmi";
 import { useMiniKit } from "@coinbase/onchainkit/minikit";
+import { parseAbi } from "viem";
+import { APP_CHAIN_ID } from "@/lib/chain-config";
 import { Collection } from "@/types/game";
 import { CharacterSelector } from "./CharacterSelector";
-import { GameHeader } from "./GameHeader";
+import { StatsHeader } from "./StatsHeader";
+import { GameFooter } from "./GameFooter";
+import { Footer } from "./Footer";
 import { WalletButton } from "./WalletButton";
 import { Button } from "./Button";
-import { StatItem } from "./StatItem";
-import { useMakeGuess, useGameState, useCollectionStats } from "@/hooks/useGame";
-import { useReadContract } from "wagmi";
+import { VictoryAnimation } from "./VictoryAnimation";
+import { useSecureGame } from "@/hooks/useSecureGame";
 import { formatAttributeValue } from "@/utils/game";
-import { ArrowDown, ArrowUp } from "lucide-react";
+import { ArrowDown, ArrowUp, Send, Loader2 } from "lucide-react";
+
+// Contract configuration for stats
+const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}`;
+
+const statsAbi = parseAbi([
+  "function winsPerCollection(address player, uint256 collectionId) external view returns (uint256)",
+  "function winsPerDayPerCollection(uint256 collectionId, uint256 day) external view returns (uint256)",
+  "function globalTotalWins() external view returns (uint256)",
+  "function collectionExists(uint256 collectionId) external view returns (bool)",
+]);
+
+// Composant Tooltip personnalisé pour mobile et desktop
+function MobileTooltip({
+  content,
+  children
+}: {
+  content: string;
+  children: React.ReactNode;
+}) {
+  const [isHovered, setIsHovered] = useState(false);
+  const [position, setPosition] = useState({ top: 0, left: 0, arrowLeft: '50%' });
+  const containerRef = useRef<HTMLDivElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isHovered) return;
+
+    const updatePosition = () => {
+      if (containerRef.current && tooltipRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        const tooltipRect = tooltipRef.current.getBoundingClientRect();
+        const padding = 8;
+        const screenWidth = window.innerWidth;
+        const elementCenter = rect.left + rect.width / 2;
+        const tooltipWidth = tooltipRect.width || 100;
+
+        let tooltipLeft = elementCenter - tooltipWidth / 2;
+
+        if (tooltipLeft < padding) {
+          tooltipLeft = padding;
+        } else if (tooltipLeft + tooltipWidth > screenWidth - padding) {
+          tooltipLeft = screenWidth - padding - tooltipWidth;
+        }
+
+        const arrowPos = elementCenter - tooltipLeft;
+        const arrowPercent = Math.max(15, Math.min(85, (arrowPos / tooltipWidth) * 100));
+
+        setPosition({
+          top: rect.top - 8,
+          left: tooltipLeft,
+          arrowLeft: `${arrowPercent}%`
+        });
+      } else if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        setPosition({
+          top: rect.top - 8,
+          left: rect.left + rect.width / 2 - 50,
+          arrowLeft: '50%'
+        });
+      }
+    };
+    updatePosition();
+    requestAnimationFrame(updatePosition);
+    window.addEventListener('scroll', updatePosition);
+    window.addEventListener('resize', updatePosition);
+    return () => {
+      window.removeEventListener('scroll', updatePosition);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [content, isHovered]);
+
+  return (
+    <>
+      <div
+        ref={containerRef}
+        className="w-full h-full cursor-pointer"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        onTouchStart={() => setIsHovered(true)}
+        onTouchEnd={() => setTimeout(() => setIsHovered(false), 1500)}
+      >
+        {children}
+      </div>
+      {isHovered && (
+        <div
+          ref={tooltipRef}
+          className="fixed z-[99999] pointer-events-none"
+          style={{
+            top: position.top,
+            left: position.left,
+            transform: 'translateY(-100%)'
+          }}
+        >
+          <div className="relative pb-2">
+            <div
+              className="text-white text-sm px-3 py-2 rounded-lg min-w-[60px] max-w-[160px] text-center whitespace-normal break-words"
+              style={{
+                backgroundColor: '#1a1a2e',
+                border: '2px solid #8b5cf6',
+                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.9)'
+              }}
+            >
+              {content}
+            </div>
+            <div
+              className="absolute"
+              style={{
+                left: position.arrowLeft,
+                transform: 'translateX(-50%)',
+                bottom: '0',
+                width: 0,
+                height: 0,
+                borderLeft: '10px solid transparent',
+                borderRight: '10px solid transparent',
+                borderTop: '10px solid #8b5cf6'
+              }}
+            />
+            <div
+              className="absolute"
+              style={{
+                left: position.arrowLeft,
+                transform: 'translateX(-50%)',
+                bottom: '2px',
+                width: 0,
+                height: 0,
+                borderLeft: '8px solid transparent',
+                borderRight: '8px solid transparent',
+                borderTop: '8px solid #1a1a2e'
+              }}
+            />
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
 
 interface GameBoardProps {
   collection: Collection;
 }
 
 export function GameBoard({ collection }: GameBoardProps) {
-  const { isConnected } = useAccount();
+  const { address, isConnected } = useAccount();
   const { context, isFrameReady } = useMiniKit();
   const isFarcasterConnected = !!context?.user?.fid;
   const [selectedCharacterId, setSelectedCharacterId] = useState<number | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [selectedCharacterName, setSelectedCharacterName] = useState<string | undefined>(undefined);
+  const [selectedCharacterImage, setSelectedCharacterImage] = useState<string | undefined>(undefined);
+  const [localErrorMessage, setLocalErrorMessage] = useState<string | null>(null);
   // État pour suivre quelles colonnes ont été révélées pour chaque guess (clé = index dans le tableau)
   const [revealedColumns, setRevealedColumns] = useState<Map<number, Set<number>>>(new Map());
   // État pour suivre quels guesses ont été complètement révélés (plus besoin d'animation)
   const [fullyRevealedGuesses, setFullyRevealedGuesses] = useState<Set<number>>(new Set());
   // État pour suivre le nombre de guesses précédents (pour détecter les nouveaux)
   const [previousGuessesCount, setPreviousGuessesCount] = useState<number>(0);
-  
-  const { makeGuess, isPending, isConfirming, isConfirmed, error } = useMakeGuess();
-  const gameStateResult = useGameState(collection);
+
+  // New secure game hook
+  const {
+    hasWonToday,
+    attemptsToday,
+    guesses,
+    dailyCharacter,
+    isLoading,
+    error: gameError,
+    isGuessPending,
+    currentDay,
+    submitGuess,
+    clearError,
+    refresh,
+  } = useSecureGame(collection);
+
+  // Compute game state from secure hook
   const gameState = {
-    collectionId: gameStateResult.collectionId,
-    dailyCharacter: gameStateResult.dailyCharacter,
-    dailyCharacterHash: gameStateResult.dailyCharacterHash,
-    attempts: gameStateResult.attempts,
-    maxAttempts: gameStateResult.maxAttempts,
-    guesses: gameStateResult.guesses,
-    isGameOver: gameStateResult.isGameOver,
-    isGameWon: gameStateResult.isGameWon,
+    collectionId: collection.id,
+    dailyCharacter,
+    attempts: attemptsToday,
+    guesses,
+    isGameOver: hasWonToday,
+    isGameWon: hasWonToday,
   };
-  const refetchGameState = gameStateResult.refetch;
-  const collectionStats = useCollectionStats(collection.id);
+
+  // Read collection stats from contract
+  const { data: userWins } = useReadContract({
+    address: CONTRACT_ADDRESS,
+    abi: statsAbi,
+    functionName: "winsPerCollection",
+    args: address ? [address, BigInt(collection.id)] : undefined,
+    chainId: APP_CHAIN_ID,
+    query: { enabled: !!address && !!CONTRACT_ADDRESS },
+  });
+
+  const { data: winnersToday } = useReadContract({
+    address: CONTRACT_ADDRESS,
+    abi: statsAbi,
+    functionName: "winsPerDayPerCollection",
+    args: [BigInt(collection.id), BigInt(currentDay)],
+    chainId: APP_CHAIN_ID,
+    query: { enabled: !!CONTRACT_ADDRESS },
+  });
+
+  const { data: totalWinners } = useReadContract({
+    address: CONTRACT_ADDRESS,
+    abi: statsAbi,
+    functionName: "globalTotalWins",
+    chainId: APP_CHAIN_ID,
+    query: { enabled: !!CONTRACT_ADDRESS },
+  });
+
+  const collectionStats = {
+    userWins: userWins ? Number(userWins) : 0,
+    winnersToday: winnersToday ? Number(winnersToday) : 0,
+    totalWinners: totalWinners ? Number(totalWinners) : 0,
+  };
+
+  // Combined error message
+  const errorMessage = localErrorMessage || gameError;
+
+  // DEBUG: Log daily character for testing (only shown when won)
+  useEffect(() => {
+    if (gameState.dailyCharacter && hasWonToday) {
+      console.log("🎯 DAILY CHARACTER (revealed after win):", {
+        id: gameState.dailyCharacter.id,
+        name: gameState.dailyCharacter.name,
+        collectionId: collection.id,
+        collectionName: collection.name,
+      });
+    }
+  }, [gameState.dailyCharacter, hasWonToday, collection.id, collection.name]);
 
   // Vérifier que la collection existe dans le contrat
-  const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}` || "0x0000000000000000000000000000000000000000";
   const { data: collectionExists } = useReadContract({
     address: CONTRACT_ADDRESS,
-    abi: [
-      {
-        inputs: [{ name: "_collectionId", type: "uint256" }],
-        name: "collectionExists",
-        outputs: [{ name: "", type: "bool" }],
-        stateMutability: "view",
-        type: "function",
-      },
-    ],
+    abi: statsAbi,
     functionName: "collectionExists",
     args: [BigInt(collection.id)],
+    chainId: APP_CHAIN_ID,
     query: {
-      enabled: !!collection.id && CONTRACT_ADDRESS !== "0x0000000000000000000000000000000000000000",
+      enabled: !!collection.id && !!CONTRACT_ADDRESS,
     },
   });
 
@@ -70,59 +261,73 @@ export function GameBoard({ collection }: GameBoardProps) {
     return gameState.guesses.some(g => g.characterId === characterId);
   };
 
+  // Handler pour la sélection d'un personnage
+  const handleCharacterSelect = (characterId: number, characterName: string, characterImage?: string) => {
+    setSelectedCharacterId(characterId);
+    setSelectedCharacterName(characterName);
+    setSelectedCharacterImage(characterImage);
+  };
+
   const handleGuess = async () => {
     if (!selectedCharacterId || !canPlay) return;
-    
+
     // Vérifier que la collection existe dans le contrat
     if (collectionExists === false) {
-      setErrorMessage(`Collection ${collection.id} does not exist in the contract. Please initialize it first with the initialize.ts script`);
+      setLocalErrorMessage(`Collection ${collection.id} does not exist in the contract. Please initialize it first.`);
       return;
     }
-    
+
     // Vérifier si ce personnage a déjà été deviné
     if (alreadyGuessed(selectedCharacterId)) {
-      setErrorMessage("You have already guessed this character today.");
+      setLocalErrorMessage("You have already guessed this character today.");
       return;
     }
 
     // Réinitialiser l'erreur
-    setErrorMessage(null);
+    setLocalErrorMessage(null);
+    clearError();
 
     try {
-      // Lancer la transaction
-      await makeGuess(collection.id, selectedCharacterId);
-      
+      // Submit guess using secure system
+      const result = await submitGuess(selectedCharacterId);
+
       // Réinitialiser la sélection immédiatement pour éviter les doubles clics
       setSelectedCharacterId(null);
-      
-      // Ne pas afficher le résultat maintenant - attendre la confirmation
-      // Le résultat sera mis à jour automatiquement via useGameState après confirmation
+      setSelectedCharacterName(undefined);
+      setSelectedCharacterImage(undefined);
+
+      // Le résultat sera mis à jour via le hook après confirmation de la transaction
+      if (!result) {
+        // Error is already set in the hook
+        return;
+      }
     } catch (err: unknown) {
       console.error("Error making guess:", err);
       const errorObj = err as { message?: string };
       let errorMsg = errorObj?.message || String(err) || "An error occurred during submission.";
-      
+
       // Messages d'erreur plus clairs
       if (errorMsg.includes("Collection does not exist") || errorMsg.includes("Collection has no characters")) {
-        errorMsg = `Collection ${collection.id} is not initialized in the contract. Please run the initialize.ts script first.`;
+        errorMsg = `Collection ${collection.id} is not initialized in the contract.`;
       } else if (errorMsg.includes("execution reverted") || errorMsg.includes("revert")) {
         errorMsg = "Transaction failed. Check that the collection is properly initialized in the contract.";
+      } else if (errorMsg.includes("Session not initialized")) {
+        errorMsg = "Session not initialized. Please try again.";
       }
-      
-      setErrorMessage(errorMsg);
+
+      setLocalErrorMessage(errorMsg);
     }
   };
 
-  // Afficher les erreurs de transaction
+  // Afficher les erreurs de jeu
   useEffect(() => {
-    if (error) {
-      const errorMsg = error.message || String(error) || "Transaction error";
-      setErrorMessage(errorMsg);
-    } else if (!isPending && !isConfirming) {
-      // Réinitialiser l'erreur quand la transaction est terminée
-      setErrorMessage(null);
+    if (gameError) {
+      setLocalErrorMessage(gameError);
+    } else if (!isLoading && !isGuessPending) {
+      // Réinitialiser l'erreur locale quand le chargement est terminé
+      setLocalErrorMessage(null);
     }
-  }, [error, isPending, isConfirming]);
+  }, [gameError, isLoading, isGuessPending]);
 
   // Initialiser les colonnes révélées pour les propositions existantes au chargement
   // On révèle immédiatement toutes les propositions sauf la dernière (qui sera animée si c'est un nouveau guess)
@@ -174,17 +379,17 @@ export function GameBoard({ collection }: GameBoardProps) {
     }
   }, [gameState.guesses, fullyRevealedGuesses]);
 
-  // Rafraîchir l'état du jeu après confirmation de la transaction
+  // Rafraîchir l'état du jeu périodiquement si une transaction est en attente
   useEffect(() => {
-    if (isConfirmed) {
-      // Attendre un peu pour que la transaction soit propagée sur le réseau
+    if (isGuessPending) {
+      // Rafraîchir après que la transaction soit confirmée
       const timeout = setTimeout(() => {
-        refetchGameState();
-      }, 2000); // 2 secondes de délai pour la propagation
-      
+        refresh();
+      }, 3000);
+
       return () => clearTimeout(timeout);
     }
-  }, [isConfirmed, refetchGameState]);
+  }, [isGuessPending, refresh]);
 
   // Détecter quand un nouveau guess est ajouté et animer uniquement celui-là
   useEffect(() => {
@@ -295,62 +500,58 @@ export function GameBoard({ collection }: GameBoardProps) {
     return "bg-red";
   };
 
-  const getArrow = (comparison: Comparison) => {
+  const getArrow = (comparison: Comparison, attrType?: string) => {
     if (comparison.isCorrect) return null;
-    if (typeof comparison.guessValue === "number" && typeof comparison.correctValue === "number") {
-      if (comparison.guessValue > comparison.correctValue) return <ArrowDown className="w-4 h-4" />;
-      if (comparison.guessValue < comparison.correctValue) return <ArrowUp className="w-4 h-4" />;
+
+    // Pour les attributs de type int, afficher les flèches
+    if (attrType === "int") {
+      const guessNum = Number(comparison.guessValue);
+      const correctNum = Number(comparison.correctValue);
+
+      if (!isNaN(guessNum) && !isNaN(correctNum)) {
+        if (guessNum > correctNum) return <ArrowDown className="w-4 h-4" />;
+        if (guessNum < correctNum) return <ArrowUp className="w-4 h-4" />;
+      }
     }
     return null;
   };
 
   return (
     <div className="flex flex-col min-h-screen">
-      <GameHeader />
-      <div className="flex justify-center px-2 sm:px-4 container mx-auto w-full max-w-7xl flex-1 py-4 sm:py-12">
+      <StatsHeader />
+      <div className="flex justify-center items-center px-2 sm:px-4 container mx-auto w-full max-w-[1200px] flex-1 py-4 sm:py-8">
         <div className="w-full space-y-3 sm:space-y-6">
           {/* Header */}
-          <div className="text-center flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 mb-4 sm:mb-12">
+          <div className="text-center flex flex-col items-center justify-center gap-1 mb-4 sm:mb-6">
             <h1 className="text-3xl md:text-4xl font-black tracking-tight flex items-center">
               <span className="bg-gradient-to-r from-violet-400 via-blue-400 to-violet-400 bg-clip-text text-transparent">
                 {collection.name}
               </span>
             </h1>
+            <span className="text-xs text-muted-foreground">
+              a{" "}
+              <a
+                href={`${process.env.NEXT_PUBLIC_QUIZZDLE_API_URL || "https://quizzdle.fr"}/en/${collection.slug || ""}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-violet-400 underline hover:no-underline transition-all"
+              >
+                quizzdle.fr
+              </a>{" "}
+              powered game
+            </span>
           </div>
-
-        {/* Stats */}
-        <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
-          <div className="flex items-center gap-2 bg-gradient-to-r from-violet-600/20 to-blue-600/20 border border-violet-500/30 rounded-xl px-4 py-2">
-            <StatItem label="Daily attempts" value={gameState.attempts} />
-          </div>
-          <div className="flex items-center gap-2 bg-gradient-to-r from-violet-600/20 to-blue-600/20 border border-violet-500/30 rounded-xl px-4 py-2">
-            <StatItem label="Your wins" value={collectionStats.userWins} />
-          </div>
-          <div className="flex items-center gap-2 bg-gradient-to-r from-violet-600/20 to-blue-600/20 border border-violet-500/30 rounded-xl px-4 py-2">
-            <StatItem label="Found today" value={collectionStats.winnersToday} />
-          </div>
-          <div className="flex items-center gap-2 bg-gradient-to-r from-violet-600/20 to-blue-600/20 border border-violet-500/30 rounded-xl px-4 py-2">
-            <StatItem label="Total found" value={collectionStats.totalWinners} />
-          </div>
-        </div>
 
         {/* Message de victoire */}
         {gameState.isGameWon && (
-          <div className="w-full relative bg-gradient-to-r from-[#121217] via-[#1a1a2e] to-[#121217] border border-violet-500/20 rounded-2xl shadow-xl shadow-violet-500/10 p-4 sm:p-6">
-            <div className="text-center">
-              <h2 className="text-2xl font-bold text-white mb-2">🎉 Congratulations!</h2>
-              <p className="text-muted-foreground">
-                You found the character in {gameState.attempts} attempt(s)!
-              </p>
-            </div>
-          </div>
+          <VictoryAnimation
+            characterName={gameState.guesses.find(g => g.isCorrect)?.characterName || "the character"}
+            attempts={gameState.attempts}
+          />
         )}
 
         {/* Zone de jeu */}
-        <div className="w-full relative bg-gradient-to-r from-[#121217] via-[#1a1a2e] to-[#121217] border border-violet-500/20 rounded-2xl shadow-xl shadow-violet-500/10 sm:p-6 px-2 py-4 sm:py-6 space-y-3 sm:space-y-4">
-          <div className="absolute inset-0 bg-gradient-to-r from-violet-500/5 via-blue-500/5 to-violet-500/5 pointer-events-none rounded-2xl"></div>
-          
-          {!gameState.isGameOver && (
+        {!gameState.isGameOver && (
             <div className="relative z-20 bg-black/20 rounded-lg border border-white/10 sm:p-6 px-3 sm:px-4 py-4 sm:py-6 space-y-3 sm:space-y-4">
               {collectionExists === false && (
                 <div className="mb-4 p-4 bg-yellow-500/20 border border-yellow-500/30 rounded-lg text-yellow-400 text-sm text-center">
@@ -364,42 +565,56 @@ export function GameBoard({ collection }: GameBoardProps) {
               ) : (
                 <p className="text-center text-white mb-4">Search and choose a character to get started...</p>
               )}
-              <div className="flex flex-col sm:flex-row items-start justify-center gap-3 sm:gap-3">
-                <div className="flex-1 w-full sm:max-w-none">
+              <div className="flex flex-row items-center gap-3">
+                <div className="flex-1">
                   <CharacterSelector
-                    characters={collection.characters}
-                    selectedCharacterId={selectedCharacterId}
-                    onSelect={setSelectedCharacterId}
-                    disabled={isPending || isConfirming || gameState.isGameOver || !isConnected}
+                    characters={collection.characters || []}
+                    onSelect={handleCharacterSelect}
+                    disabled={isLoading || isGuessPending || gameState.isGameOver || !isConnected}
                     disabledCharacters={gameState.guesses.map(g => g.characterId)}
                   />
                 </div>
-                
-                {/* Conteneur pour le bouton aligné avec l'input (h-12) */}
-                <div className="w-full sm:w-auto sm:h-12 sm:flex sm:items-center">
+
+                {/* Submit button */}
+                <div className="h-12 flex items-center">
                   {!isConnected ? (
-                    <WalletButton fullWidth={false} className="h-12 px-6 w-full sm:w-auto" />
+                    <WalletButton fullWidth={false} className="h-12 px-6" />
                   ) : (
                     <Button
                       onClick={handleGuess}
                       disabled={
-                        !selectedCharacterId || 
-                        isPending || 
-                        isConfirming || 
+                        !selectedCharacterId ||
+                        isLoading ||
+                        isGuessPending ||
                         gameState.isGameOver ||
                         alreadyGuessed(selectedCharacterId)
                       }
-                      className="h-12 px-6 whitespace-nowrap w-full sm:w-auto"
+                      className="!h-12 !w-12 !p-0 !px-0 !py-0 flex items-center justify-center"
+                      aria-label="Submit guess"
                     >
-                      {isPending || isConfirming
-                        ? "Envoi..."
-                        : alreadyGuessed(selectedCharacterId || 0)
-                        ? "Déjà deviné"
-                        : "Deviner"}
+                      {isLoading || isGuessPending ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <Send className="w-5 h-5" />
+                      )}
                     </Button>
                   )}
                 </div>
               </div>
+
+              {/* Selected character display - full width */}
+              {selectedCharacterId && selectedCharacterName && (
+                <div className="mt-3 flex items-center gap-4 p-4 bg-black/20 rounded-lg border border-white/10 w-full">
+                  {selectedCharacterImage && (
+                    <img
+                      src={selectedCharacterImage}
+                      alt={selectedCharacterName}
+                      className="size-16 rounded object-cover border-2 border-violet-500/30"
+                    />
+                  )}
+                  <span className="text-white font-semibold text-lg">{selectedCharacterName}</span>
+                </div>
+              )}
 
               {errorMessage && (
                 <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-red/20 border border-red/30 rounded-lg text-red text-sm text-center">
@@ -407,7 +622,7 @@ export function GameBoard({ collection }: GameBoardProps) {
                 </div>
               )}
 
-              {(isPending || isConfirming) && (
+              {(isLoading || isGuessPending) && (
                 <div className="mt-3 sm:mt-4 text-center text-muted-foreground">
                   <p>Transaction in progress...</p>
                   <p className="text-sm">Please wait while your guess is being confirmed.</p>
@@ -418,92 +633,83 @@ export function GameBoard({ collection }: GameBoardProps) {
 
           {/* Tableau des résultats */}
           {gameState.guesses.length > 0 && (
-            <div className="relative z-10 mt-4 sm:mt-6">
-              <div className="flex sm:flex-col sm:!overflow-hidden flex-row overflow-hidden">
-                {/* En-têtes */}
-                <div className="flex gap-3 w-auto sm:flex-row min-w-28 sm:flex flex-col">
-                  <div className="text-center font-semibold sm:border-b-4 border-b-0 pb-2 flex-1 min-w-24 sm:block flex items-center justify-center text-white">
+            <div className="relative z-10 mt-4 overflow-hidden">
+              {/* Container avec largeur minimale pour forcer le scroll horizontal si nécessaire */}
+              <div className="min-w-full overflow-hidden">
+                {/* En-têtes - toujours sur une ligne */}
+                <div
+                  className="grid gap-1 sm:gap-2 mb-2"
+                  style={{ gridTemplateColumns: `repeat(${collection.attributes.length + 1}, minmax(0, 1fr))` }}
+                >
+                  <div className="text-center font-semibold text-[10px] sm:text-xs text-white truncate px-1">
                     Character
                   </div>
                   {collection.attributes.map((attr) => (
-                    <div key={attr.name} className="text-center font-semibold sm:border-b-4 border-b-0 pb-2 flex-1 min-w-24 sm:block flex items-center justify-center text-white">
+                    <div key={attr.name} className="text-center font-semibold text-[10px] sm:text-xs text-white truncate px-1">
                       {attr.nameFront}
                     </div>
                   ))}
                 </div>
 
-                {/* Lignes de résultats */}
-                <div className="flex sm:flex-col-reverse gap-2 sm:gap-4 sm:mt-2 mt-0 flex-row-reverse overflow-auto">
+                {/* Lignes de résultats - du plus récent en haut */}
+                <div className="flex flex-col-reverse gap-1 sm:gap-2">
                   {gameState.guesses.map((guess, index) => {
-                    const guessCharacter = collection.characters.find(c => c.id === guess.characterId);
                     const revealed = revealedColumns.get(index);
-                    // Vérifier si cette proposition est complètement révélée (pas d'animation en cours)
                     const isFullyRevealed = fullyRevealedGuesses.has(index);
-                    // Si la proposition est en cours d'animation (dans le Map mais pas complètement révélée)
-                    // OU si elle n'est pas du tout dans le Map (nouveau guess qui n'a pas encore commencé l'animation)
                     const isCurrentlyAnimating = !isFullyRevealed;
-                    // Pour les propositions en cours d'animation, on vérifie si chaque colonne est révélée
-                    // Pour les autres (complètement révélées), on révèle tout par défaut
                     const isPersonnageRevealed = isCurrentlyAnimating ? (revealed?.has(0) ?? false) : true;
-                    
+
                     return (
-                      <div key={index} className="flex gap-3 w-auto sm:flex-row flex-col">
+                      <div
+                        key={index}
+                        className="grid gap-1 sm:gap-2"
+                        style={{ gridTemplateColumns: `repeat(${collection.attributes.length + 1}, minmax(0, 1fr))` }}
+                      >
                         {/* Colonne personnage */}
-                        <div className="min-w-24 min-h-16 flex-1">
-                          <div className={`min-h-16 bg-white/10 border border-white/10 rounded flex items-center justify-center text-center min-w-24 flex-1 transition-opacity duration-300 ${isPersonnageRevealed ? 'opacity-100' : 'opacity-0'}`}>
-                            {guessCharacter?.imageUrl ? (
-                              <div className="w-full h-full relative flex items-center justify-center gap-4 p-2">
-                                <img 
-                                  src={guessCharacter.imageUrl} 
-                                  alt={guessCharacter.name} 
-                                  className="object-cover size-12 rounded"
+                        <div className={`h-12 sm:h-14 bg-white/10 border border-white/10 rounded transition-opacity duration-300 overflow-hidden ${isPersonnageRevealed ? 'opacity-100' : 'opacity-0'}`}>
+                          <MobileTooltip content={guess.characterName}>
+                            <div className="flex items-center justify-center gap-1 px-1 w-full h-full">
+                              {guess.characterImage && (
+                                <img
+                                  src={guess.characterImage}
+                                  alt={guess.characterName}
+                                  className="w-6 h-6 sm:w-8 sm:h-8 rounded object-cover flex-shrink-0"
                                 />
-                                <div className="hidden sm:block text-white text-sm font-medium">
-                                  {guessCharacter.name}
-                                </div>
-                              </div>
-                            ) : (
-                              <span className="text-white text-sm">{guess.characterName}</span>
-                            )}
-                          </div>
+                              )}
+                              <span className="text-white text-[9px] sm:text-xs font-medium truncate">
+                                {guess.characterName}
+                              </span>
+                            </div>
+                          </MobileTooltip>
                         </div>
 
                         {/* Colonnes attributs */}
                         {guess.comparisons.map((comparison, compIndex) => {
+                          const attrType = collection.attributes[compIndex]?.type;
                           const statusClass = getStatusClass(comparison);
-                          const arrow = getArrow(comparison);
-                          const columnIndex = compIndex + 1; // +1 car la colonne personnage est à l'index 0
-                          // Pour les propositions en cours d'animation, vérifier si la colonne est révélée
-                          // Si révélé est undefined (pas encore initialisé), la colonne n'est pas révélée
-                          // Pour les autres (complètement révélées), révéler par défaut
+                          const arrow = getArrow(comparison, attrType);
+                          const columnIndex = compIndex + 1;
                           const isRevealed = isCurrentlyAnimating ? (revealed?.has(columnIndex) ?? false) : true;
-                          
+
                           return (
-                            <div key={compIndex} className="flex-1 perspective min-w-24">
-                              <div className={`relative w-full h-16 preserve-3d transform-style transition-transform duration-500 ${isRevealed ? 'rotate-y-180' : 'rotate-y-0'}`}>
-                                {/* Face avant (cachée) */}
-                                <div className="absolute inset-0 flex items-center justify-center bg-white/5 border border-white/10 text-white rounded backface-hidden"></div>
-                                
-                                {/* Face arrière (résultat) */}
-                                <div className={`absolute inset-0 flex items-center justify-center text-white rounded backface-hidden rotate-y-180 px-2 ${statusClass}`}>
-                                  <div className="relative w-full flex items-center justify-center text-center">
-                                    <div className="flex items-end justify-center gap-1 w-full text-sm">
+                            <MobileTooltip key={compIndex} content={formatAttributeValue(comparison.guessValue)}>
+                              <div className="perspective overflow-hidden h-12 sm:h-14">
+                                <div className={`relative w-full h-full preserve-3d transform-style transition-transform duration-500 ${isRevealed ? 'rotate-y-180' : 'rotate-y-0'}`}>
+                                  {/* Face avant (cachée) */}
+                                  <div className="absolute inset-0 flex items-center justify-center bg-white/5 border border-white/10 text-white rounded backface-hidden"></div>
+
+                                  {/* Face arrière (résultat) */}
+                                  <div className={`absolute inset-0 text-white rounded backface-hidden rotate-y-180 ${statusClass}`}>
+                                    <div className="flex items-center justify-center gap-0.5 w-full h-full px-1">
                                       {arrow}
-                                      <span 
-                                        className="line-clamp-2 overflow-hidden text-ellipsis"
-                                        style={{
-                                          display: '-webkit-box',
-                                          WebkitBoxOrient: 'vertical',
-                                          WebkitLineClamp: 2,
-                                        }}
-                                      >
+                                      <span className="text-[9px] sm:text-xs text-center truncate leading-tight">
                                         {formatAttributeValue(comparison.guessValue)}
                                       </span>
                                     </div>
                                   </div>
                                 </div>
                               </div>
-                            </div>
+                            </MobileTooltip>
                           );
                         })}
                       </div>
@@ -514,8 +720,14 @@ export function GameBoard({ collection }: GameBoardProps) {
             </div>
           )}
         </div>
-        </div>
       </div>
+      <GameFooter
+        attempts={gameState.attempts}
+        userWins={collectionStats.userWins}
+        winnersToday={collectionStats.winnersToday}
+        totalWinners={collectionStats.totalWinners}
+      />
+      <Footer />
     </div>
   );
 }

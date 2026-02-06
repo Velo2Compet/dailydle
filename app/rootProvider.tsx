@@ -4,9 +4,12 @@ import { base } from "wagmi/chains";
 import { OnchainKitProvider } from "@coinbase/onchainkit";
 
 export function RootProvider({ children }: { children: ReactNode }) {
+  // Utiliser la clé API seulement si elle est définie
+  const apiKey = process.env.NEXT_PUBLIC_ONCHAINKIT_API_KEY || undefined;
+
   return (
     <OnchainKitProvider
-      apiKey={process.env.NEXT_PUBLIC_ONCHAINKIT_API_KEY}
+      {...(apiKey && { apiKey })}
       chain={base}
       config={{
         appearance: {
@@ -17,6 +20,7 @@ export function RootProvider({ children }: { children: ReactNode }) {
           preference: "all",
         },
       }}
+      projectId={undefined}
       miniKit={{
         enabled: true,
         autoConnect: true,
