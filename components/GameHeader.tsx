@@ -149,14 +149,14 @@ export function GameHeader({ className }: GameHeaderProps) {
             <StatCard
               icon={<TrophyIcon />}
               value={totalWins}
-              label="Vos victoires"
+              label="Your wins"
               variant="highlight"
             />
           )}
           <StatCard
             icon={<TotalIcon />}
             value={globalTotalWins}
-            label="Total victoires"
+            label="Total wins"
           />
         </div>
 
@@ -177,7 +177,7 @@ export function GameHeader({ className }: GameHeaderProps) {
               >
                 <WalletIcon />
                 <div className="flex flex-col items-end">
-                  <span className="text-[10px] sm:text-xs text-white/60 hidden sm:inline">Wallet connecté</span>
+                  <span className="text-[10px] sm:text-xs text-white/60 hidden sm:inline">Wallet connected</span>
                   <span className="text-white text-xs sm:text-sm font-mono">
                     {address.slice(0, 4)}...{address.slice(-3)}
                   </span>
@@ -187,7 +187,7 @@ export function GameHeader({ className }: GameHeaderProps) {
                 variant="danger"
                 size="sm"
                 onClick={() => disconnect()}
-                title="Déconnecter le wallet"
+                title="Disconnect wallet"
                 className="!p-1.5 sm:!p-2"
               >
                 <LogOutIcon />

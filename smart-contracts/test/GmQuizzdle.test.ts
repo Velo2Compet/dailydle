@@ -41,7 +41,8 @@ describe("GmQuizzdle", function () {
     });
 
     it("Should emit GmSent event", async function () {
-      const currentDay = Math.floor(Date.now() / 1000 / ONE_DAY);
+      const latestBlock = await ethers.provider.getBlock("latest");
+      const currentDay = Math.floor(latestBlock.timestamp / ONE_DAY);
       await expect(gmQuizzdle.connect(player1).gm())
         .to.emit(gmQuizzdle, "GmSent")
         .withArgs(player1.address, 1, currentDay);

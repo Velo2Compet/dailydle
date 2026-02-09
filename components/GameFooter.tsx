@@ -96,21 +96,21 @@ export function GameFooter({ attempts, userWins, winnersToday, totalWinners }: G
         <StatCard
           icon={<AttemptsIcon />}
           value={attempts}
-          label="Essais"
+          label="Attempts"
           variant="highlight"
           flex
         />
         <StatCard
           icon={<TrophyIcon />}
           value={userWins}
-          label="Victoires"
+          label="Wins"
           variant="highlight"
           flex
         />
         <StatCard
           icon={<TodayIcon />}
           value={winnersToday}
-          label="Aujourd'hui"
+          label="Today"
           flex
         />
         <StatCard

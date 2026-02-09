@@ -10,7 +10,8 @@
       "Bash(npx hardhat test:*)",
       "Bash(npm run build:*)",
       "Bash(npx hardhat compile:*)",
-      "Bash(npx hardhat run:*)"
+      "Bash(npx hardhat run:*)",
+      "Bash(npx next build)"
     ]
   }
 }

@@ -30,10 +30,10 @@ export function CategoriesView({ categories }: CategoriesViewProps) {
       <main className={styles.mainContainer}>
         <div className={styles.categoriesWrapper}>
           <div style={{ display: "flex", alignItems: "center", gap: "1rem", justifyContent: "space-between" }}>
-            <h1 className={styles.sectionTitle}>Catégories</h1>
+            <h1 className={styles.sectionTitle}>Categories</h1>
             <input
               type="text"
-              placeholder="Rechercher..."
+              placeholder="Search..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{

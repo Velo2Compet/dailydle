@@ -152,7 +152,7 @@ export function ProfileView() {
 
   // Winner Rewards
   const { yesterday, today, refetch: refetchWinnerRewards } = usePlayerWinsYesterdayAndToday();
-  const { totalPending, unclaimedDaysCount, refetch: refetchTotalPending } = useTotalPendingRewards(30);
+  const { totalPending, refetch: refetchTotalPending } = useTotalPendingRewards(30);
   const {
     claimAll: claimAllWinnerRewards,
     isPending: isWinnerClaimPending,
@@ -337,7 +337,7 @@ export function ProfileView() {
   };
 
   const handleEmergencyWithdraw = async () => {
-    if (!confirm("ATTENTION: Cette action retire TOUS les fonds du contrat, y compris les rewards réservés aux joueurs. Êtes-vous sûr?")) {
+    if (!confirm("WARNING: This will withdraw ALL funds from the contract, including rewards reserved for players. Are you sure?")) {
       return;
     }
     try {
@@ -455,7 +455,7 @@ export function ProfileView() {
               </div>
               <div>
                 <h2 className="text-sm sm:text-lg font-bold text-white">Rewards</h2>
-                <p className="text-white/50 text-xs sm:text-sm">45% des frais redistribués aux gagnants</p>
+                <p className="text-white/50 text-xs sm:text-sm">45% of fees redistributed to winners</p>
               </div>
             </div>
 
@@ -463,29 +463,31 @@ export function ProfileView() {
             <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-3 sm:mb-4">
               {/* Today's Wins */}
               <div className="bg-white/5 rounded-lg sm:rounded-xl p-2 sm:p-4 text-center">
-                <p className="text-[10px] sm:text-sm text-white/50 mb-0.5 sm:mb-1">Gagné aujourd&apos;hui</p>
+                <p className="text-[10px] sm:text-sm text-white/50 mb-0.5 sm:mb-1">Won today</p>
                 <p className="text-xl sm:text-3xl font-bold text-blue-400">{today.wins}</p>
                 <p className="text-[10px] sm:text-xs text-white/40 mt-0.5 sm:mt-1">
-                  Claimable demain
+                  (out of {todayPool.totalWins} total)
                 </p>
               </div>
 
-              {/* Total Claimable */}
-              <div className="bg-white/5 rounded-lg sm:rounded-xl p-2 sm:p-4 text-center">
-                <p className="text-[10px] sm:text-sm text-white/50 mb-0.5 sm:mb-1">À récupérer</p>
-                <p className="text-xl sm:text-3xl font-bold text-green-400">
-                  {formatEther(totalPending)}
+              {/* Estimated Rewards Tomorrow */}
+              <div className="bg-white/5 border border-violet-500/20 rounded-lg sm:rounded-xl p-2 sm:p-4 text-center">
+                <p className="text-[10px] sm:text-sm text-white/50 mb-0.5 sm:mb-1">Est. tomorrow</p>
+                <p className="text-xl sm:text-3xl font-bold text-yellow-400">
+                  {today.wins > 0 && todayPool.totalWins > 0
+                    ? `~${formatEther((todayPool.winnersPool * BigInt(today.wins)) / BigInt(todayPool.totalWins))}`
+                    : "—"}
                 </p>
                 <p className="text-[10px] sm:text-xs text-white/40 mt-0.5 sm:mt-1">ETH</p>
               </div>
 
-              {/* Unclaimed Days */}
+              {/* Total Claimable */}
               <div className="bg-white/5 rounded-lg sm:rounded-xl p-2 sm:p-4 text-center">
-                <p className="text-[10px] sm:text-sm text-white/50 mb-0.5 sm:mb-1">Jours non-claimés</p>
-                <p className="text-xl sm:text-3xl font-bold text-violet-400">{unclaimedDaysCount}</p>
-                <p className="text-[10px] sm:text-xs text-white/40 mt-0.5 sm:mt-1">
-                  jour{unclaimedDaysCount > 1 ? 's' : ''}
+                <p className="text-[10px] sm:text-sm text-white/50 mb-0.5 sm:mb-1">Claimable</p>
+                <p className="text-xl sm:text-3xl font-bold text-green-400">
+                  {formatEther(totalPending)}
                 </p>
+                <p className="text-[10px] sm:text-xs text-white/40 mt-0.5 sm:mt-1">ETH</p>
               </div>
             </div>
 
@@ -502,34 +504,34 @@ export function ProfileView() {
               {isWinnerClaimPending || isWinnerClaimConfirming
                 ? "Claiming..."
                 : totalPending === BigInt(0)
-                ? "Rien à récupérer"
+                ? "Nothing to claim"
                 : `Claim ${formatEther(totalPending)} ETH`}
             </button>
 
             {isWinnerClaimConfirmed && (
               <p className="text-green-400 text-xs sm:text-sm text-center mt-2">
-                Rewards récupérés ! 🎉
+                Rewards claimed! 🎉
               </p>
             )}
 
             {!yesterday.isFinalized && today.wins > 0 && (
               <p className="text-white/50 text-xs sm:text-sm text-center mt-2">
-                Les rewards d&apos;aujourd&apos;hui seront disponibles demain après la première partie jouée.
+                Today&apos;s rewards will be available tomorrow after the first game is played.
               </p>
             )}
 
             {totalPending === BigInt(0) && today.wins === 0 && (
               <p className="text-white/40 text-xs sm:text-sm text-center mt-2">
-                Gagnez des parties pour accumuler des rewards !
+                Win games to earn rewards!
               </p>
             )}
           </div>
 
           {/* Owner Withdrawal */}
           {isOwner && (
-            <div className="mb-4 sm:mb-6 bg-gradient-to-r from-[#121217] via-[#1a1a2e] to-[#121217] border border-yellow-500/20 rounded-2xl p-4 sm:p-6">
+            <div className="mb-4 sm:mb-6 bg-gradient-to-r from-[#121217] via-[#1a1a2e] to-[#121217] border border-red-500/40 rounded-2xl p-4 sm:p-6">
               <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
-                <div className="p-1.5 sm:p-2 rounded-lg bg-yellow-500/20 text-yellow-400 scale-75 sm:scale-100">
+                <div className="p-1.5 sm:p-2 rounded-lg bg-red-500/20 text-red-400 scale-75 sm:scale-100">
                   <WalletIcon />
                 </div>
                 <div>
@@ -639,14 +641,14 @@ export function ProfileView() {
 
           {/* Daily Pool Management (Owner Only) */}
           {isOwner && (
-            <div className="mb-4 sm:mb-6 bg-gradient-to-r from-[#121217] via-[#1a1a2e] to-[#121217] border border-emerald-500/20 rounded-2xl p-4 sm:p-6">
+            <div className="mb-4 sm:mb-6 bg-gradient-to-r from-[#121217] via-[#1a1a2e] to-[#121217] border border-red-500/40 rounded-2xl p-4 sm:p-6">
               <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
-                <div className="p-1.5 sm:p-2 rounded-lg bg-emerald-500/20 text-emerald-400 scale-75 sm:scale-100">
+                <div className="p-1.5 sm:p-2 rounded-lg bg-red-500/20 text-red-400 scale-75 sm:scale-100">
                   <PiggyBankIcon />
                 </div>
                 <div>
                   <h2 className="text-sm sm:text-lg font-bold text-white">Prize Pool</h2>
-                  <p className="text-white/50 text-xs sm:text-sm">45% redistribué aux gagnants</p>
+                  <p className="text-white/50 text-xs sm:text-sm">45% redistributed to winners</p>
                 </div>
               </div>
 
@@ -654,23 +656,23 @@ export function ProfileView() {
               <div className="grid grid-cols-2 gap-2 sm:gap-4 mb-3 sm:mb-4">
                 {/* Yesterday's Pool */}
                 <div className="bg-white/5 rounded-lg sm:rounded-xl p-2 sm:p-4 text-center">
-                  <p className="text-[10px] sm:text-sm text-white/50 mb-0.5 sm:mb-1">Hier (claimable)</p>
+                  <p className="text-[10px] sm:text-sm text-white/50 mb-0.5 sm:mb-1">Yesterday (claimable)</p>
                   <p className="text-base sm:text-2xl font-bold text-orange-400">
                     {contractBalance > BigInt(0) ? formatEther(yesterdayPool.winnersPool) : "0"} ETH
                   </p>
                   <p className="text-[10px] sm:text-xs text-white/40 mt-0.5 sm:mt-1">
-                    {yesterdayPool.isFinalized ? `${yesterdayPool.totalWins} gagnant${yesterdayPool.totalWins > 1 ? 's' : ''}` : "Pas encore finalisé"}
+                    {yesterdayPool.isFinalized ? `${yesterdayPool.totalWins} winner${yesterdayPool.totalWins > 1 ? 's' : ''}` : "Not finalized yet"}
                   </p>
                 </div>
 
                 {/* Today's Pool */}
                 <div className="bg-white/5 rounded-lg sm:rounded-xl p-2 sm:p-4 text-center">
-                  <p className="text-[10px] sm:text-sm text-white/50 mb-0.5 sm:mb-1">Aujourd&apos;hui</p>
+                  <p className="text-[10px] sm:text-sm text-white/50 mb-0.5 sm:mb-1">Today</p>
                   <p className="text-base sm:text-2xl font-bold text-emerald-400">
                     {contractBalance > BigInt(0) ? formatEther(todayPool.winnersPool) : "0"} ETH
                   </p>
                   <p className="text-[10px] sm:text-xs text-white/40 mt-0.5 sm:mt-1">
-                    {todayPool.totalWins} gagnant{todayPool.totalWins > 1 ? 's' : ''} · Total: {contractBalance > BigInt(0) ? formatEther(todayPool.totalPool) : "0"}
+                    {todayPool.totalWins} winner{todayPool.totalWins > 1 ? 's' : ''} · Total: {contractBalance > BigInt(0) ? formatEther(todayPool.totalPool) : "0"}
                   </p>
                 </div>
               </div>
@@ -678,7 +680,7 @@ export function ProfileView() {
               {/* Add Bonus for Today */}
               <div className="bg-white/5 rounded-lg sm:rounded-xl p-3 sm:p-4">
                 <p className="text-white/70 text-xs sm:text-sm mb-2">
-                  Ajouter un bonus à la cagnotte du jour (redistribué demain)
+                  Add bonus to today&apos;s pool (redistributed tomorrow)
                 </p>
                 <div className="flex gap-2">
                   <input
@@ -688,7 +690,7 @@ export function ProfileView() {
                     placeholder="0.01"
                     value={bonusAmount}
                     onChange={(e) => setBonusAmount(e.target.value)}
-                    className="flex-1 px-3 sm:px-4 py-2 bg-black/30 border border-white/10 rounded-lg sm:rounded-xl text-white text-sm placeholder-white/40 focus:outline-none focus:border-emerald-500/50"
+                    className="flex-1 px-3 sm:px-4 py-2 bg-black/30 border border-white/10 rounded-lg sm:rounded-xl text-white text-sm placeholder-white/40 focus:outline-none focus:border-red-500/50"
                   />
                   <span className="flex items-center text-white/50 text-sm">ETH</span>
                   <button
@@ -709,13 +711,13 @@ export function ProfileView() {
 
               {isBonusConfirmed && (
                 <p className="text-emerald-400 text-xs sm:text-sm text-center mt-2">
-                  Bonus ajouté ! 🎁
+                  Bonus added! 🎁
                 </p>
               )}
 
               {bonusError && (
                 <p className="text-red-400 text-xs sm:text-sm text-center mt-2">
-                  Erreur: {bonusError.message}
+                  Error: {bonusError.message}
                 </p>
               )}
             </div>
@@ -758,7 +760,7 @@ export function ProfileView() {
                       <span className="text-lg sm:text-xl font-bold text-violet-400">{referralCode}</span>
                       <button
                         onClick={() => setIsEditingCode(true)}
-                        className="text-white/40 hover:text-white text-xs sm:text-sm"
+                        className="px-3 sm:px-4 py-1 sm:py-1.5 bg-white/10 text-white rounded-lg sm:rounded-xl font-medium text-xs sm:text-sm hover:bg-white/20 transition-colors"
                       >
                         Edit
                       </button>

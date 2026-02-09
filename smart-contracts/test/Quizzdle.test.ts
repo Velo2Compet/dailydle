@@ -815,7 +815,8 @@ describe("Quizzdle", function () {
 
       const [totalPool, winnersPool] = await quizzdle.getDayPool(targetDay);
       expect(totalPool).to.equal(BONUS_AMOUNT);
-      expect(winnersPool).to.equal((BONUS_AMOUNT * BigInt(45)) / BigInt(100));
+      // Bonus goes 100% to winners pool (45% only applies to revenue)
+      expect(winnersPool).to.equal(BONUS_AMOUNT);
     });
 
     it("Should allow owner to add bonus for tomorrow", async function () {
@@ -945,7 +946,8 @@ describe("Quizzdle", function () {
 
       expect(day).to.equal(tomorrow);
       expect(totalPool).to.equal(BONUS_AMOUNT);
-      expect(winnersPool).to.equal((BONUS_AMOUNT * BigInt(45)) / BigInt(100));
+      // Bonus goes 100% to winners pool (45% only applies to revenue)
+      expect(winnersPool).to.equal(BONUS_AMOUNT);
     });
   });
 
