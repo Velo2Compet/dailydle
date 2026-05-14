@@ -13,54 +13,86 @@ describe("Quizzdle", function () {
   const COLLECTION_ID = 1;
   const FEE = 1000000000n; // 1 gwei
 
-  // Helper to get current day
   async function getCurrentDay(): Promise<bigint> {
     const block = await ethers.provider.getBlock("latest");
     return BigInt(Math.floor(block.timestamp / 86400));
   }
 
-  // Helper to create salted hash (simulates what API does)
-  function createSaltedHash(characterId: number, sessionSignature: string, salt: string): string {
+  // Mirrors the on-chain saltedGuess derivation used by the API
+  function makeSaltedGuess(characterId: number, sessionSig: string, salt: string): string {
     return ethers.keccak256(
       ethers.solidityPacked(
         ["uint256", "string", "string"],
-        [characterId, sessionSignature, salt]
+        [characterId, sessionSig, salt]
       )
     );
   }
 
-  // Helper to sign commitment (simulates server signature)
-  async function signCommitment(
+  // Server-side attestation (must match Quizzdle.sol's hash exactly)
+  async function signGuessAttestation(
     signer: any,
+    contractAddress: string,
     playerAddress: string,
     collectionId: number,
     day: bigint,
-    commitment: string,
+    saltedGuess: string,
+    isCorrect: boolean,
     shouldFlag: boolean
   ): Promise<string> {
     const messageHash = ethers.keccak256(
       ethers.solidityPacked(
-        ["address", "uint256", "uint256", "bytes32", "bool"],
-        [playerAddress, collectionId, day, commitment, shouldFlag]
+        ["address", "address", "uint256", "uint256", "bytes32", "bool", "bool"],
+        [contractAddress, playerAddress, collectionId, day, saltedGuess, isCorrect, shouldFlag]
       )
     );
-    return await signer.signMessage(ethers.getBytes(messageHash));
+    return signer.signMessage(ethers.getBytes(messageHash));
+  }
+
+  async function submit(
+    player: any,
+    {
+      collectionId = COLLECTION_ID,
+      saltedGuess,
+      isCorrect,
+      shouldFlag = false,
+      value = FEE,
+      signer = server,
+    }: {
+      collectionId?: number;
+      saltedGuess: string;
+      isCorrect: boolean;
+      shouldFlag?: boolean;
+      value?: bigint;
+      signer?: any;
+    }
+  ) {
+    const day = await getCurrentDay();
+    const sig = await signGuessAttestation(
+      signer,
+      await quizzdle.getAddress(),
+      player.address,
+      collectionId,
+      day,
+      saltedGuess,
+      isCorrect,
+      shouldFlag
+    );
+    return quizzdle
+      .connect(player)
+      .submitSaltedGuess(collectionId, saltedGuess, isCorrect, shouldFlag, sig, { value });
   }
 
   beforeEach(async function () {
     [owner, server, player1, player2, player3] = await ethers.getSigners();
 
-    // Deploy Quizzdle
     const QuizzdleFactory = await ethers.getContractFactory("Quizzdle");
     quizzdle = await QuizzdleFactory.deploy();
     await quizzdle.waitForDeployment();
 
-    // Deploy QuizzdleReferal
     const QuizzdleReferalFactory = await ethers.getContractFactory("QuizzdleReferal");
     referral = await QuizzdleReferalFactory.deploy();
     await referral.waitForDeployment();
 
-    // Configure contract
     await quizzdle.setServer(server.address);
     await quizzdle.addCollection(COLLECTION_ID);
     await quizzdle.setReferralContract(await referral.getAddress());
@@ -105,72 +137,104 @@ describe("Quizzdle", function () {
     const WRONG_CHAR_ID = 99;
 
     it("Should accept valid guess with correct signature", async function () {
-      const currentDay = await getCurrentDay();
-      const commitment = createSaltedHash(CORRECT_CHAR_ID, SESSION_SIG, SALT);
-      const saltedGuess = createSaltedHash(CORRECT_CHAR_ID, SESSION_SIG, SALT);
-      const signature = await signCommitment(
-        server,
-        player1.address,
-        COLLECTION_ID,
-        currentDay,
-        commitment,
-        false
-      );
-
-      const tx = await quizzdle.connect(player1).submitSaltedGuess(
-        COLLECTION_ID,
-        saltedGuess,
-        commitment,
-        signature,
-        false,
-        { value: FEE }
-      );
+      const saltedGuess = makeSaltedGuess(CORRECT_CHAR_ID, SESSION_SIG, SALT);
+      const tx = await submit(player1, { saltedGuess, isCorrect: true });
 
       await expect(tx).to.emit(quizzdle, "SaltedGuessMade");
-      await expect(tx).to.emit(quizzdle, "CommitmentSet");
       await expect(tx).to.emit(quizzdle, "WinRecorded");
 
       expect(await quizzdle.hasWonToday(player1.address, COLLECTION_ID)).to.be.true;
     });
 
     it("Should record incorrect guess without win", async function () {
-      const currentDay = await getCurrentDay();
-      const commitment = createSaltedHash(CORRECT_CHAR_ID, SESSION_SIG, SALT);
-      const saltedGuess = createSaltedHash(WRONG_CHAR_ID, SESSION_SIG, SALT);
-      const signature = await signCommitment(
-        server,
-        player1.address,
-        COLLECTION_ID,
-        currentDay,
-        commitment,
-        false
-      );
-
-      await quizzdle.connect(player1).submitSaltedGuess(
-        COLLECTION_ID,
-        saltedGuess,
-        commitment,
-        signature,
-        false,
-        { value: FEE }
-      );
+      const saltedGuess = makeSaltedGuess(WRONG_CHAR_ID, SESSION_SIG, SALT);
+      await submit(player1, { saltedGuess, isCorrect: false });
 
       expect(await quizzdle.hasWonToday(player1.address, COLLECTION_ID)).to.be.false;
       expect(await quizzdle.getAttemptsToday(player1.address, COLLECTION_ID)).to.equal(1);
     });
 
     it("Should reject invalid server signature", async function () {
-      const currentDay = await getCurrentDay();
-      const commitment = createSaltedHash(CORRECT_CHAR_ID, SESSION_SIG, SALT);
-      const saltedGuess = createSaltedHash(CORRECT_CHAR_ID, SESSION_SIG, SALT);
+      const saltedGuess = makeSaltedGuess(CORRECT_CHAR_ID, SESSION_SIG, SALT);
 
-      // Sign with wrong signer (player1 instead of server)
-      const badSignature = await signCommitment(
-        player1,
+      // Sign with the wrong key (player1 instead of server)
+      await expect(
+        submit(player1, { saltedGuess, isCorrect: true, signer: player1 })
+      ).to.be.revertedWith("Invalid server signature");
+    });
+
+    it("Should reject a flipped isCorrect bit (signature mismatch)", async function () {
+      // Server signs isCorrect=false, user tries to submit isCorrect=true
+      const saltedGuess = makeSaltedGuess(WRONG_CHAR_ID, SESSION_SIG, SALT);
+      const day = await getCurrentDay();
+      const sig = await signGuessAttestation(
+        server,
+        await quizzdle.getAddress(),
         player1.address,
         COLLECTION_ID,
-        currentDay,
-        commitment,
+        day,
+        saltedGuess,
+        false, // signed false
+        false
+      );
+      await expect(
+        quizzdle.connect(player1).submitSaltedGuess(
+          COLLECTION_ID,
+          saltedGuess,
+          true, // user flips it
+          false,
+          sig,
+          { value: FEE }
+        )
+      ).to.be.revertedWith("Invalid server signature");
+    });
+
+    it("Should prevent the old commitment-leak exploit (no free wins)", async function () {
+      // Past attack: pass commitment as both saltedGuess and _commitment.
+      // New design: there is no public commitment; the user can never claim
+      // isCorrect=true without a server signature attesting it.
+      const saltedGuess = makeSaltedGuess(WRONG_CHAR_ID, SESSION_SIG, SALT);
+
+      // The user has only a "wrong" attestation and tries to lie about it
+      const day = await getCurrentDay();
+      const wrongSig = await signGuessAttestation(
+        server,
+        await quizzdle.getAddress(),
+        player1.address,
+        COLLECTION_ID,
+        day,
+        saltedGuess,
+        false,
+        false
+      );
+      await expect(
+        quizzdle.connect(player1).submitSaltedGuess(
+          COLLECTION_ID,
+          saltedGuess,
+          true,
+          false,
+          wrongSig,
+          { value: FEE }
+        )
+      ).to.be.revertedWith("Invalid server signature");
+    });
+
+    it("Should reject signature replay across contracts (address bound)", async function () {
+      // Deploy a second Quizzdle and sign for it; the original contract must reject.
+      const QuizzdleFactory = await ethers.getContractFactory("Quizzdle");
+      const other = await QuizzdleFactory.deploy();
+      await other.waitForDeployment();
+
+      const saltedGuess = makeSaltedGuess(CORRECT_CHAR_ID, SESSION_SIG, SALT);
+      const day = await getCurrentDay();
+      const sig = await signGuessAttestation(
+        server,
+        await other.getAddress(), // signed for the OTHER contract
+        player1.address,
+        COLLECTION_ID,
+        day,
+        saltedGuess,
+        true,
         false
       );
 
@@ -178,135 +242,47 @@ describe("Quizzdle", function () {
         quizzdle.connect(player1).submitSaltedGuess(
           COLLECTION_ID,
           saltedGuess,
-          commitment,
-          badSignature,
+          true,
           false,
+          sig,
           { value: FEE }
         )
       ).to.be.revertedWith("Invalid server signature");
     });
 
     it("Should reject insufficient fee", async function () {
-      const currentDay = await getCurrentDay();
-      const commitment = createSaltedHash(CORRECT_CHAR_ID, SESSION_SIG, SALT);
-      const signature = await signCommitment(
-        server,
-        player1.address,
-        COLLECTION_ID,
-        currentDay,
-        commitment,
-        false
-      );
-
+      const saltedGuess = makeSaltedGuess(CORRECT_CHAR_ID, SESSION_SIG, SALT);
       await expect(
-        quizzdle.connect(player1).submitSaltedGuess(
-          COLLECTION_ID,
-          commitment,
-          commitment,
-          signature,
-          false,
-          { value: 0 }
-        )
+        submit(player1, { saltedGuess, isCorrect: true, value: 0n })
       ).to.be.revertedWith("Insufficient fee");
     });
 
     it("Should reject non-existent collection", async function () {
-      const currentDay = await getCurrentDay();
-      const commitment = createSaltedHash(CORRECT_CHAR_ID, SESSION_SIG, SALT);
-      const signature = await signCommitment(
-        server,
-        player1.address,
-        999, // Non-existent collection
-        currentDay,
-        commitment,
-        false
-      );
-
+      const saltedGuess = makeSaltedGuess(CORRECT_CHAR_ID, SESSION_SIG, SALT);
       await expect(
-        quizzdle.connect(player1).submitSaltedGuess(
-          999,
-          commitment,
-          commitment,
-          signature,
-          false,
-          { value: FEE }
-        )
+        submit(player1, { saltedGuess, isCorrect: true, collectionId: 999 })
       ).to.be.revertedWith("Collection does not exist");
     });
 
     it("Should reject playing after already winning", async function () {
-      const currentDay = await getCurrentDay();
-      const commitment = createSaltedHash(CORRECT_CHAR_ID, SESSION_SIG, SALT);
-      const signature = await signCommitment(
-        server,
-        player1.address,
-        COLLECTION_ID,
-        currentDay,
-        commitment,
-        false
-      );
+      const saltedGuess = makeSaltedGuess(CORRECT_CHAR_ID, SESSION_SIG, SALT);
+      await submit(player1, { saltedGuess, isCorrect: true });
 
-      // First guess - win
-      await quizzdle.connect(player1).submitSaltedGuess(
-        COLLECTION_ID,
-        commitment,
-        commitment,
-        signature,
-        false,
-        { value: FEE }
-      );
-
-      // Second guess - should fail
       await expect(
-        quizzdle.connect(player1).submitSaltedGuess(
-          COLLECTION_ID,
-          commitment,
-          commitment,
-          signature,
-          false,
-          { value: FEE }
-        )
+        submit(player1, { saltedGuess, isCorrect: true })
       ).to.be.revertedWith("Already won today");
     });
 
     it("Should allow multiple wrong guesses before winning", async function () {
-      const currentDay = await getCurrentDay();
-      const commitment = createSaltedHash(CORRECT_CHAR_ID, SESSION_SIG, SALT);
-      const signature = await signCommitment(
-        server,
-        player1.address,
-        COLLECTION_ID,
-        currentDay,
-        commitment,
-        false
-      );
-
-      // Wrong guesses
       for (let i = 0; i < 3; i++) {
-        const wrongGuess = createSaltedHash(WRONG_CHAR_ID + i, SESSION_SIG, SALT);
-        await quizzdle.connect(player1).submitSaltedGuess(
-          COLLECTION_ID,
-          wrongGuess,
-          commitment,
-          signature,
-          false,
-          { value: FEE }
-        );
+        const wrongGuess = makeSaltedGuess(WRONG_CHAR_ID + i, SESSION_SIG, SALT);
+        await submit(player1, { saltedGuess: wrongGuess, isCorrect: false });
       }
-
       expect(await quizzdle.getAttemptsToday(player1.address, COLLECTION_ID)).to.equal(3);
       expect(await quizzdle.hasWonToday(player1.address, COLLECTION_ID)).to.be.false;
 
-      // Final correct guess
-      const correctGuess = createSaltedHash(CORRECT_CHAR_ID, SESSION_SIG, SALT);
-      await quizzdle.connect(player1).submitSaltedGuess(
-        COLLECTION_ID,
-        correctGuess,
-        commitment,
-        signature,
-        false,
-        { value: FEE }
-      );
+      const correctGuess = makeSaltedGuess(CORRECT_CHAR_ID, SESSION_SIG, SALT);
+      await submit(player1, { saltedGuess: correctGuess, isCorrect: true });
 
       expect(await quizzdle.getAttemptsToday(player1.address, COLLECTION_ID)).to.equal(4);
       expect(await quizzdle.hasWonToday(player1.address, COLLECTION_ID)).to.be.true;
@@ -319,27 +295,8 @@ describe("Quizzdle", function () {
     const CHAR_ID = 42;
 
     it("Should auto-flag wallet when shouldFlag is true", async function () {
-      const currentDay = await getCurrentDay();
-      const commitment = createSaltedHash(CHAR_ID, SESSION_SIG, SALT);
-
-      // Signature with shouldFlag = true
-      const signature = await signCommitment(
-        server,
-        player1.address,
-        COLLECTION_ID,
-        currentDay,
-        commitment,
-        true // shouldFlag
-      );
-
-      const tx = await quizzdle.connect(player1).submitSaltedGuess(
-        COLLECTION_ID,
-        commitment,
-        commitment,
-        signature,
-        true, // shouldFlag
-        { value: FEE }
-      );
+      const saltedGuess = makeSaltedGuess(CHAR_ID, SESSION_SIG, SALT);
+      const tx = await submit(player1, { saltedGuess, isCorrect: true, shouldFlag: true });
 
       await expect(tx).to.emit(quizzdle, "WalletFlagged")
         .withArgs(player1.address, "Multi-wallet detected");
@@ -349,109 +306,58 @@ describe("Quizzdle", function () {
     });
 
     it("Should not flag wallet when shouldFlag is false", async function () {
-      const currentDay = await getCurrentDay();
-      const commitment = createSaltedHash(CHAR_ID, SESSION_SIG, SALT);
-
-      const signature = await signCommitment(
-        server,
-        player1.address,
-        COLLECTION_ID,
-        currentDay,
-        commitment,
-        false
-      );
-
-      await quizzdle.connect(player1).submitSaltedGuess(
-        COLLECTION_ID,
-        commitment,
-        commitment,
-        signature,
-        false,
-        { value: FEE }
-      );
-
+      const saltedGuess = makeSaltedGuess(CHAR_ID, SESSION_SIG, SALT);
+      await submit(player1, { saltedGuess, isCorrect: true, shouldFlag: false });
       expect(await quizzdle.flaggedWallets(player1.address)).to.be.false;
     });
 
-    it("Should reject mismatched shouldFlag signature", async function () {
-      const currentDay = await getCurrentDay();
-      const commitment = createSaltedHash(CHAR_ID, SESSION_SIG, SALT);
-
-      // Sign with shouldFlag = false
-      const signature = await signCommitment(
+    it("Should reject mismatched shouldFlag (signature bound)", async function () {
+      const saltedGuess = makeSaltedGuess(CHAR_ID, SESSION_SIG, SALT);
+      const day = await getCurrentDay();
+      const sig = await signGuessAttestation(
         server,
+        await quizzdle.getAddress(),
         player1.address,
         COLLECTION_ID,
-        currentDay,
-        commitment,
-        false
+        day,
+        saltedGuess,
+        true,
+        false // signed shouldFlag=false
       );
-
-      // But submit with shouldFlag = true
       await expect(
         quizzdle.connect(player1).submitSaltedGuess(
           COLLECTION_ID,
-          commitment,
-          commitment,
-          signature,
-          true, // Mismatch!
+          saltedGuess,
+          true,
+          true, // user submits true
+          sig,
           { value: FEE }
         )
       ).to.be.revertedWith("Invalid server signature");
     });
 
     it("Should not double-flag already flagged wallet", async function () {
-      const currentDay = await getCurrentDay();
-      const commitment = createSaltedHash(CHAR_ID, SESSION_SIG, SALT);
+      const wrong = makeSaltedGuess(0, SESSION_SIG, SALT);
+      await submit(player1, { saltedGuess: wrong, isCorrect: false, shouldFlag: true });
+      const flaggedBefore = await quizzdle.totalFlaggedWallets();
 
-      // First guess with flag
-      const signature1 = await signCommitment(
-        server,
-        player1.address,
-        COLLECTION_ID,
-        currentDay,
-        commitment,
-        true
-      );
+      const correct = makeSaltedGuess(CHAR_ID, SESSION_SIG, SALT);
+      await submit(player1, { saltedGuess: correct, isCorrect: true, shouldFlag: true });
+      const flaggedAfter = await quizzdle.totalFlaggedWallets();
 
-      await quizzdle.connect(player1).submitSaltedGuess(
-        COLLECTION_ID,
-        createSaltedHash(99, SESSION_SIG, SALT), // Wrong guess
-        commitment,
-        signature1,
-        true,
-        { value: FEE }
-      );
-
-      const flaggedCountBefore = await quizzdle.totalFlaggedWallets();
-
-      // Second guess - already flagged, shouldn't increment count
-      // Note: Commitment already set, so shouldFlag check is skipped
-      await quizzdle.connect(player1).submitSaltedGuess(
-        COLLECTION_ID,
-        commitment, // Correct guess this time
-        commitment,
-        signature1,
-        true,
-        { value: FEE }
-      );
-
-      const flaggedCountAfter = await quizzdle.totalFlaggedWallets();
-      expect(flaggedCountAfter).to.equal(flaggedCountBefore);
+      expect(flaggedAfter).to.equal(flaggedBefore);
     });
   });
 
   describe("Admin Flag Functions", function () {
     it("Should allow owner to flag wallet", async function () {
       await quizzdle.connect(owner).flagWallet(player1.address, "Manual flag");
-
       expect(await quizzdle.flaggedWallets(player1.address)).to.be.true;
       expect(await quizzdle.flagReason(player1.address)).to.equal("Manual flag");
     });
 
     it("Should allow server to flag wallet", async function () {
       await quizzdle.connect(server).flagWallet(player1.address, "Server flag");
-
       expect(await quizzdle.flaggedWallets(player1.address)).to.be.true;
     });
 
@@ -464,13 +370,11 @@ describe("Quizzdle", function () {
     it("Should allow owner to unflag wallet", async function () {
       await quizzdle.flagWallet(player1.address, "Test");
       await quizzdle.unflagWallet(player1.address);
-
       expect(await quizzdle.flaggedWallets(player1.address)).to.be.false;
     });
 
     it("Should reject server unflag attempts", async function () {
       await quizzdle.flagWallet(player1.address, "Test");
-
       await expect(
         quizzdle.connect(server).unflagWallet(player1.address)
       ).to.be.revertedWith("Only owner");
@@ -479,11 +383,8 @@ describe("Quizzdle", function () {
     it("Should track total flagged wallets correctly", async function () {
       await quizzdle.flagWallet(player1.address, "Test1");
       await quizzdle.flagWallet(player2.address, "Test2");
-
       expect(await quizzdle.totalFlaggedWallets()).to.equal(2);
-
       await quizzdle.unflagWallet(player1.address);
-
       expect(await quizzdle.totalFlaggedWallets()).to.equal(1);
     });
   });
@@ -494,71 +395,37 @@ describe("Quizzdle", function () {
     const CHAR_ID = 42;
 
     async function setupWinForPlayer(player: any, shouldFlag: boolean = false) {
-      const currentDay = await getCurrentDay();
-      const commitment = createSaltedHash(CHAR_ID, SESSION_SIG, SALT);
-      const signature = await signCommitment(
-        server,
-        player.address,
-        COLLECTION_ID,
-        currentDay,
-        commitment,
-        shouldFlag
-      );
-
-      await quizzdle.connect(player).submitSaltedGuess(
-        COLLECTION_ID,
-        commitment,
-        commitment,
-        signature,
-        shouldFlag,
-        { value: FEE }
-      );
+      const saltedGuess = makeSaltedGuess(CHAR_ID, SESSION_SIG, SALT);
+      await submit(player, { saltedGuess, isCorrect: true, shouldFlag });
     }
 
     it("Should block flagged wallet from claiming winner rewards", async function () {
-      // Player wins but gets flagged
       await setupWinForPlayer(player1, true);
-
-      // Advance time to next day to finalize
       await ethers.provider.send("evm_increaseTime", [86400]);
       await ethers.provider.send("evm_mine", []);
-
-      // Another player plays to trigger finalization
       await setupWinForPlayer(player2, false);
 
-      const day = (await getCurrentDay()) - BigInt(1);
-
+      const day = (await getCurrentDay()) - 1n;
       await expect(
         quizzdle.connect(player1).claimWinnerRewards(day)
       ).to.be.revertedWith("Wallet flagged for abuse");
     });
 
     it("Should allow clean wallet to claim winner rewards", async function () {
-      // Player wins without flag
       await setupWinForPlayer(player1, false);
-
-      // Advance time to next day
       await ethers.provider.send("evm_increaseTime", [86400]);
       await ethers.provider.send("evm_mine", []);
-
-      // Another player plays to trigger finalization
       await setupWinForPlayer(player2, false);
 
-      const day = (await getCurrentDay()) - BigInt(1);
-
-      // Should not revert
+      const day = (await getCurrentDay()) - 1n;
       await quizzdle.connect(player1).claimWinnerRewards(day);
     });
 
     it("Should block flagged wallet from claiming referral rewards", async function () {
-      // Setup: player1 creates a referral code, player2 uses it
       await referral.connect(player1).setReferralCode("PLAYER1");
       await referral.connect(player2).registerWithReferral("PLAYER1");
 
-      // Player2 plays (generates referral reward for player1)
       await setupWinForPlayer(player2, false);
-
-      // Flag player1
       await quizzdle.flagWallet(player1.address, "Abuse");
 
       await expect(
@@ -573,36 +440,14 @@ describe("Quizzdle", function () {
     const CHAR_ID = 42;
 
     it("Should allow owner to withdraw non-reserved funds", async function () {
-      // Generate some revenue
-      const currentDay = await getCurrentDay();
-      const commitment = createSaltedHash(CHAR_ID, SESSION_SIG, SALT);
-      const signature = await signCommitment(
-        server,
-        player1.address,
-        COLLECTION_ID,
-        currentDay,
-        commitment,
-        false
-      );
-
       const largerFee = ethers.parseEther("0.01");
       await quizzdle.setFee(largerFee);
-
-      await quizzdle.connect(player1).submitSaltedGuess(
-        COLLECTION_ID,
-        commitment,
-        commitment,
-        signature,
-        false,
-        { value: largerFee }
-      );
+      const saltedGuess = makeSaltedGuess(CHAR_ID, SESSION_SIG, SALT);
+      await submit(player1, { saltedGuess, isCorrect: true, value: largerFee });
 
       const ownerBalanceBefore = await ethers.provider.getBalance(owner.address);
-
       await quizzdle.withdraw(owner.address);
-
       const ownerBalanceAfter = await ethers.provider.getBalance(owner.address);
-      // Balance should increase (minus gas)
       expect(ownerBalanceAfter).to.be.greaterThan(ownerBalanceBefore);
     });
 
@@ -625,81 +470,22 @@ describe("Quizzdle", function () {
     const CHAR_ID = 42;
 
     it("Should return correct user session data", async function () {
-      const currentDay = await getCurrentDay();
-      const commitment = createSaltedHash(CHAR_ID, SESSION_SIG, SALT);
-      const signature = await signCommitment(
-        server,
-        player1.address,
-        COLLECTION_ID,
-        currentDay,
-        commitment,
-        false
-      );
+      const saltedGuess = makeSaltedGuess(CHAR_ID, SESSION_SIG, SALT);
+      await submit(player1, { saltedGuess, isCorrect: true });
 
-      await quizzdle.connect(player1).submitSaltedGuess(
-        COLLECTION_ID,
-        commitment,
-        commitment,
-        signature,
-        false,
-        { value: FEE }
-      );
-
-      const session = await quizzdle.getUserSession(player1.address, COLLECTION_ID, currentDay);
-      expect(session.commitment).to.equal(commitment);
+      const day = await getCurrentDay();
+      const session = await quizzdle.getUserSession(player1.address, COLLECTION_ID, day);
       expect(session.hasWonToday).to.be.true;
       expect(session.attemptsToday).to.equal(1);
     });
 
-    it("Should return correct commitment", async function () {
-      const currentDay = await getCurrentDay();
-      const commitment = createSaltedHash(CHAR_ID, SESSION_SIG, SALT);
-      const signature = await signCommitment(
-        server,
-        player1.address,
-        COLLECTION_ID,
-        currentDay,
-        commitment,
-        false
-      );
-
-      await quizzdle.connect(player1).submitSaltedGuess(
-        COLLECTION_ID,
-        createSaltedHash(99, SESSION_SIG, SALT), // Wrong guess
-        commitment,
-        signature,
-        false,
-        { value: FEE }
-      );
-
-      expect(await quizzdle.getCommitment(player1.address, COLLECTION_ID)).to.equal(commitment);
-    });
-
     it("Should return player daily guesses", async function () {
-      const currentDay = await getCurrentDay();
-      const commitment = createSaltedHash(CHAR_ID, SESSION_SIG, SALT);
-      const signature = await signCommitment(
-        server,
-        player1.address,
-        COLLECTION_ID,
-        currentDay,
-        commitment,
-        false
-      );
-
-      // Make 2 wrong guesses
       for (let i = 0; i < 2; i++) {
-        await quizzdle.connect(player1).submitSaltedGuess(
-          COLLECTION_ID,
-          createSaltedHash(i + 1, SESSION_SIG, SALT),
-          commitment,
-          signature,
-          false,
-          { value: FEE }
-        );
+        const wrong = makeSaltedGuess(i + 1, SESSION_SIG, SALT);
+        await submit(player1, { saltedGuess: wrong, isCorrect: false });
       }
-
-      const guesses = await quizzdle.getPlayerDailyGuesses(player1.address, COLLECTION_ID, currentDay);
+      const day = await getCurrentDay();
+      const guesses = await quizzdle.getPlayerDailyGuesses(player1.address, COLLECTION_ID, day);
       expect(guesses.length).to.equal(2);
       expect(guesses[0].isCorrect).to.be.false;
       expect(guesses[1].isCorrect).to.be.false;
@@ -707,7 +493,6 @@ describe("Quizzdle", function () {
 
     it("Should return wallet flag status", async function () {
       await quizzdle.flagWallet(player1.address, "Test reason");
-
       const [flagged, reason] = await quizzdle.isWalletFlagged(player1.address);
       expect(flagged).to.be.true;
       expect(reason).to.equal("Test reason");
@@ -720,35 +505,16 @@ describe("Quizzdle", function () {
     const CHAR_ID = 42;
 
     it("Should credit referral rewards", async function () {
-      // Player1 creates referral code, Player2 uses it
       await referral.connect(player1).setReferralCode("PLAYER1CODE");
       await referral.connect(player2).registerWithReferral("PLAYER1CODE");
-
-      const currentDay = await getCurrentDay();
-      const commitment = createSaltedHash(CHAR_ID, SESSION_SIG, SALT);
-      const signature = await signCommitment(
-        server,
-        player2.address,
-        COLLECTION_ID,
-        currentDay,
-        commitment,
-        false
-      );
 
       const largerFee = ethers.parseEther("0.01");
       await quizzdle.setFee(largerFee);
 
-      await quizzdle.connect(player2).submitSaltedGuess(
-        COLLECTION_ID,
-        commitment,
-        commitment,
-        signature,
-        false,
-        { value: largerFee }
-      );
+      const saltedGuess = makeSaltedGuess(CHAR_ID, SESSION_SIG, SALT);
+      await submit(player2, { saltedGuess, isCorrect: true, value: largerFee });
 
-      // 10% referral
-      const expectedReferral = largerFee / BigInt(10);
+      const expectedReferral = largerFee / 10n;
       expect(await quizzdle.referralRewards(player1.address)).to.equal(expectedReferral);
     });
   });
@@ -759,42 +525,27 @@ describe("Quizzdle", function () {
     const CHAR_ID = 42;
 
     it("Should track global stats correctly", async function () {
-      const currentDay = await getCurrentDay();
-      const commitment = createSaltedHash(CHAR_ID, SESSION_SIG, SALT);
+      const saltedGuess = makeSaltedGuess(CHAR_ID, SESSION_SIG, SALT);
+      await submit(player1, { saltedGuess, isCorrect: true });
+      await submit(player2, { saltedGuess, isCorrect: true });
 
-      const signature1 = await signCommitment(server, player1.address, COLLECTION_ID, currentDay, commitment, false);
-      const signature2 = await signCommitment(server, player2.address, COLLECTION_ID, currentDay, commitment, false);
-
-      await quizzdle.connect(player1).submitSaltedGuess(COLLECTION_ID, commitment, commitment, signature1, false, { value: FEE });
-      await quizzdle.connect(player2).submitSaltedGuess(COLLECTION_ID, commitment, commitment, signature2, false, { value: FEE });
-
+      const day = await getCurrentDay();
       expect(await quizzdle.globalTotalWins()).to.equal(2);
-      expect(await quizzdle.globalTotalPaid()).to.equal(FEE * BigInt(2));
-      expect(await quizzdle.totalWinsPerDay(currentDay)).to.equal(2);
+      expect(await quizzdle.globalTotalPaid()).to.equal(FEE * 2n);
+      expect(await quizzdle.totalWinsPerDay(day)).to.equal(2);
     });
 
     it("Should track per-player stats correctly", async function () {
-      const currentDay = await getCurrentDay();
-      const commitment = createSaltedHash(CHAR_ID, SESSION_SIG, SALT);
-      const signature = await signCommitment(server, player1.address, COLLECTION_ID, currentDay, commitment, false);
-
-      // 3 wrong guesses then correct
       for (let i = 0; i < 3; i++) {
-        await quizzdle.connect(player1).submitSaltedGuess(
-          COLLECTION_ID,
-          createSaltedHash(i + 1, SESSION_SIG, SALT),
-          commitment,
-          signature,
-          false,
-          { value: FEE }
-        );
+        const wrong = makeSaltedGuess(i + 1, SESSION_SIG, SALT);
+        await submit(player1, { saltedGuess: wrong, isCorrect: false });
       }
-
-      await quizzdle.connect(player1).submitSaltedGuess(COLLECTION_ID, commitment, commitment, signature, false, { value: FEE });
+      const correct = makeSaltedGuess(CHAR_ID, SESSION_SIG, SALT);
+      await submit(player1, { saltedGuess: correct, isCorrect: true });
 
       expect(await quizzdle.totalWins(player1.address)).to.equal(1);
       expect(await quizzdle.winsPerCollection(player1.address, COLLECTION_ID)).to.equal(1);
-      expect(await quizzdle.totalPaid(player1.address)).to.equal(FEE * BigInt(4));
+      expect(await quizzdle.totalPaid(player1.address)).to.equal(FEE * 4n);
     });
   });
 
@@ -802,152 +553,116 @@ describe("Quizzdle", function () {
     const SALT = "test_salt";
     const SESSION_SIG = "session_123";
     const CHAR_ID = 42;
-    const BONUS_AMOUNT = ethers.parseEther("0.01"); // 10$ en ETH (exemple)
+    const BONUS_AMOUNT = ethers.parseEther("0.01");
 
     it("Should allow owner to add bonus to a specific day", async function () {
-      const currentDay = await getCurrentDay();
-      const targetDay = currentDay + BigInt(1); // tomorrow
-
+      const targetDay = (await getCurrentDay()) + 1n;
       const tx = await quizzdle.connect(owner).addDailyBonus(targetDay, { value: BONUS_AMOUNT });
-
-      await expect(tx).to.emit(quizzdle, "DailyBonusAdded")
-        .withArgs(targetDay, BONUS_AMOUNT, owner.address);
+      await expect(tx).to.emit(quizzdle, "DailyBonusAdded").withArgs(targetDay, BONUS_AMOUNT, owner.address);
 
       const [totalPool, winnersPool] = await quizzdle.getDayPool(targetDay);
       expect(totalPool).to.equal(BONUS_AMOUNT);
-      // Bonus goes 100% to winners pool (45% only applies to revenue)
       expect(winnersPool).to.equal(BONUS_AMOUNT);
     });
 
     it("Should allow owner to add bonus for tomorrow", async function () {
       const tx = await quizzdle.connect(owner).addBonusForTomorrow({ value: BONUS_AMOUNT });
+      const tomorrow = (await getCurrentDay()) + 1n;
+      await expect(tx).to.emit(quizzdle, "DailyBonusAdded").withArgs(tomorrow, BONUS_AMOUNT, owner.address);
 
-      const tomorrow = (await getCurrentDay()) + BigInt(1);
-
-      await expect(tx).to.emit(quizzdle, "DailyBonusAdded")
-        .withArgs(tomorrow, BONUS_AMOUNT, owner.address);
-
-      const [totalPool, winnersPool, day] = await quizzdle.getTomorrowPool();
+      const [totalPool, , day] = await quizzdle.getTomorrowPool();
       expect(day).to.equal(tomorrow);
       expect(totalPool).to.equal(BONUS_AMOUNT);
     });
 
     it("Should reject non-owner bonus additions", async function () {
-      const tomorrow = (await getCurrentDay()) + BigInt(1);
-
+      const tomorrow = (await getCurrentDay()) + 1n;
       await expect(
         quizzdle.connect(player1).addDailyBonus(tomorrow, { value: BONUS_AMOUNT })
       ).to.be.revertedWith("Only owner");
-
       await expect(
         quizzdle.connect(player1).addBonusForTomorrow({ value: BONUS_AMOUNT })
       ).to.be.revertedWith("Only owner");
     });
 
     it("Should reject zero ETH bonus", async function () {
-      const tomorrow = (await getCurrentDay()) + BigInt(1);
-
+      const tomorrow = (await getCurrentDay()) + 1n;
       await expect(
         quizzdle.connect(owner).addDailyBonus(tomorrow, { value: 0 })
       ).to.be.revertedWith("Must send ETH");
     });
 
     it("Should reject bonus for already finalized day", async function () {
-      const currentDay = await getCurrentDay();
-      const commitment = createSaltedHash(CHAR_ID, SESSION_SIG, SALT);
-      const signature = await signCommitment(
-        server,
-        player1.address,
-        COLLECTION_ID,
-        currentDay,
-        commitment,
-        false
-      );
+      const saltedGuess = makeSaltedGuess(CHAR_ID, SESSION_SIG, SALT);
+      const today = await getCurrentDay();
+      await submit(player1, { saltedGuess, isCorrect: true });
 
-      // Play to generate revenue
-      await quizzdle.connect(player1).submitSaltedGuess(
-        COLLECTION_ID,
-        commitment,
-        commitment,
-        signature,
-        false,
-        { value: FEE }
-      );
-
-      // Advance time to next day
       await ethers.provider.send("evm_increaseTime", [86400]);
       await ethers.provider.send("evm_mine", []);
 
-      // Play on new day to trigger finalization of previous day
-      const newDay = await getCurrentDay();
-      const newCommitment = createSaltedHash(CHAR_ID + 1, SESSION_SIG, SALT);
-      const newSignature = await signCommitment(
-        server,
-        player2.address,
-        COLLECTION_ID,
-        newDay,
-        newCommitment,
-        false
-      );
+      const newGuess = makeSaltedGuess(CHAR_ID + 1, SESSION_SIG, SALT);
+      await submit(player2, { saltedGuess: newGuess, isCorrect: true });
 
-      await quizzdle.connect(player2).submitSaltedGuess(
-        COLLECTION_ID,
-        newCommitment,
-        newCommitment,
-        newSignature,
-        false,
-        { value: FEE }
-      );
-
-      // Try to add bonus to finalized day
       await expect(
-        quizzdle.connect(owner).addDailyBonus(currentDay, { value: BONUS_AMOUNT })
+        quizzdle.connect(owner).addDailyBonus(today, { value: BONUS_AMOUNT })
       ).to.be.revertedWith("Day already finalized");
     });
 
     it("Should combine bonus with player fees in reward pool", async function () {
-      // Add bonus for today
-      const currentDay = await getCurrentDay();
-      await quizzdle.connect(owner).addDailyBonus(currentDay, { value: BONUS_AMOUNT });
-
-      // Player plays
-      const commitment = createSaltedHash(CHAR_ID, SESSION_SIG, SALT);
-      const signature = await signCommitment(
-        server,
-        player1.address,
-        COLLECTION_ID,
-        currentDay,
-        commitment,
-        false
-      );
+      const today = await getCurrentDay();
+      await quizzdle.connect(owner).addDailyBonus(today, { value: BONUS_AMOUNT });
 
       const largerFee = ethers.parseEther("0.005");
       await quizzdle.setFee(largerFee);
 
-      await quizzdle.connect(player1).submitSaltedGuess(
-        COLLECTION_ID,
-        commitment,
-        commitment,
-        signature,
-        false,
-        { value: largerFee }
-      );
+      const saltedGuess = makeSaltedGuess(CHAR_ID, SESSION_SIG, SALT);
+      await submit(player1, { saltedGuess, isCorrect: true, value: largerFee });
 
-      // Check total pool = bonus + fee
-      const [totalPool] = await quizzdle.getDayPool(currentDay);
+      const [totalPool] = await quizzdle.getDayPool(today);
       expect(totalPool).to.equal(BONUS_AMOUNT + largerFee);
     });
+  });
 
-    it("Should return correct tomorrow pool info", async function () {
-      await quizzdle.connect(owner).addBonusForTomorrow({ value: BONUS_AMOUNT });
+  describe("finalizeDay (public)", function () {
+    const SALT = "test_salt";
+    const SESSION_SIG = "session_123";
+    const CHAR_ID = 42;
 
-      const [totalPool, winnersPool, day] = await quizzdle.getTomorrowPool();
-      const tomorrow = (await getCurrentDay()) + BigInt(1);
+    it("Should reject finalizing the current/future day", async function () {
+      const today = await getCurrentDay();
+      await expect(quizzdle.finalizeDay(today)).to.be.revertedWith("Day not finished");
+      await expect(quizzdle.finalizeDay(today + 5n)).to.be.revertedWith("Day not finished");
+    });
 
-      expect(day).to.equal(tomorrow);
-      expect(totalPool).to.equal(BONUS_AMOUNT);
-      // Bonus goes 100% to winners pool (45% only applies to revenue)
-      expect(winnersPool).to.equal(BONUS_AMOUNT);
+    it("Should allow anyone to finalize a past day so winners can claim", async function () {
+      // Day N: player1 wins
+      const day1 = await getCurrentDay();
+      const saltedGuess = makeSaltedGuess(CHAR_ID, SESSION_SIG, SALT);
+      await submit(player1, { saltedGuess, isCorrect: true });
+
+      // Skip 2 days WITHOUT anyone playing — without the public finalize,
+      // day1 would stay forever unfinalized.
+      await ethers.provider.send("evm_increaseTime", [86400 * 2]);
+      await ethers.provider.send("evm_mine", []);
+
+      // Anyone (here player3) can finalize the past day
+      await quizzdle.connect(player3).finalizeDay(day1);
+      expect(await quizzdle.dayFinalized(day1)).to.be.true;
+
+      // Winners can now claim
+      await quizzdle.connect(player1).claimWinnerRewards(day1);
+    });
+
+    it("Should be idempotent (rejects double finalization)", async function () {
+      const day1 = await getCurrentDay();
+      const saltedGuess = makeSaltedGuess(CHAR_ID, SESSION_SIG, SALT);
+      await submit(player1, { saltedGuess, isCorrect: true });
+
+      await ethers.provider.send("evm_increaseTime", [86400 * 2]);
+      await ethers.provider.send("evm_mine", []);
+
+      await quizzdle.finalizeDay(day1);
+      await expect(quizzdle.finalizeDay(day1)).to.be.revertedWith("Already finalized");
     });
   });
 
@@ -957,25 +672,9 @@ describe("Quizzdle", function () {
     const CHAR_ID = 42;
     const LARGER_FEE = ethers.parseEther("0.01");
 
-    async function setupWinForPlayer(player: any, day: bigint) {
-      const commitment = createSaltedHash(CHAR_ID, SESSION_SIG + day.toString(), SALT);
-      const signature = await signCommitment(
-        server,
-        player.address,
-        COLLECTION_ID,
-        day,
-        commitment,
-        false
-      );
-
-      await quizzdle.connect(player).submitSaltedGuess(
-        COLLECTION_ID,
-        commitment,
-        commitment,
-        signature,
-        false,
-        { value: LARGER_FEE }
-      );
+    async function setupWinForPlayer(player: any) {
+      const saltedGuess = makeSaltedGuess(CHAR_ID, SESSION_SIG, SALT);
+      await submit(player, { saltedGuess, isCorrect: true, value: LARGER_FEE });
     }
 
     beforeEach(async function () {
@@ -983,74 +682,49 @@ describe("Quizzdle", function () {
     });
 
     it("Should return correct total pending rewards", async function () {
-      // Day 1: player1 wins
       const day1 = await getCurrentDay();
-      await setupWinForPlayer(player1, day1);
+      await setupWinForPlayer(player1);
 
-      // Advance to Day 2
       await ethers.provider.send("evm_increaseTime", [86400]);
       await ethers.provider.send("evm_mine", []);
+      await setupWinForPlayer(player2);
 
-      // Day 2: another player plays to finalize Day 1
-      const day2 = await getCurrentDay();
-      await setupWinForPlayer(player2, day2);
-
-      // Check total pending for player1
       const [totalPending, unclaimedDays] = await quizzdle.getTotalPendingRewards(player1.address, 30);
-
       expect(unclaimedDays).to.equal(1);
       expect(totalPending).to.be.greaterThan(0);
-
-      // Verify it matches getPendingWinnerRewards for day1
-      const day1Pending = await quizzdle.getPendingWinnerRewards(player1.address, day1);
-      expect(totalPending).to.equal(day1Pending);
+      expect(totalPending).to.equal(await quizzdle.getPendingWinnerRewards(player1.address, day1));
     });
 
     it("Should claim all rewards from multiple days in one transaction", async function () {
-      // Day 1: player1 wins
       const day1 = await getCurrentDay();
-      await setupWinForPlayer(player1, day1);
+      await setupWinForPlayer(player1);
 
-      // Advance to Day 2
       await ethers.provider.send("evm_increaseTime", [86400]);
       await ethers.provider.send("evm_mine", []);
-
-      // Day 2: player1 wins again + finalize Day 1
       const day2 = await getCurrentDay();
-      await setupWinForPlayer(player1, day2);
+      await setupWinForPlayer(player1);
 
-      // Advance to Day 3
       await ethers.provider.send("evm_increaseTime", [86400]);
       await ethers.provider.send("evm_mine", []);
+      await setupWinForPlayer(player2);
 
-      // Day 3: another player plays to finalize Day 2
-      const day3 = await getCurrentDay();
-      await setupWinForPlayer(player2, day3);
-
-      // Check total pending for player1 (should have 2 days)
       const [totalPending, unclaimedDays] = await quizzdle.getTotalPendingRewards(player1.address, 30);
       expect(unclaimedDays).to.equal(2);
       expect(totalPending).to.be.greaterThan(0);
 
-      // Claim all
       const balanceBefore = await ethers.provider.getBalance(player1.address);
       const tx = await quizzdle.connect(player1).claimAllWinnerRewards(30);
       const receipt = await tx.wait();
-
       const balanceAfter = await ethers.provider.getBalance(player1.address);
       const gasUsed = receipt.gasUsed * receipt.gasPrice;
       const netReceived = balanceAfter - balanceBefore + gasUsed;
 
       expect(netReceived).to.equal(totalPending);
-
-      // Verify both days are now claimed
       expect(await quizzdle.claimedDays(player1.address, day1)).to.be.true;
       expect(await quizzdle.claimedDays(player1.address, day2)).to.be.true;
 
-      // Verify no more pending
-      const [newTotalPending, newUnclaimedDays] = await quizzdle.getTotalPendingRewards(player1.address, 30);
-      expect(newUnclaimedDays).to.equal(0);
-      expect(newTotalPending).to.equal(0);
+      const [newPending] = await quizzdle.getTotalPendingRewards(player1.address, 30);
+      expect(newPending).to.equal(0);
     });
 
     it("Should revert if no rewards to claim", async function () {
@@ -1060,89 +734,30 @@ describe("Quizzdle", function () {
     });
 
     it("Should block flagged wallets from claiming all rewards", async function () {
-      // Day 1: player1 wins
-      const day1 = await getCurrentDay();
-      await setupWinForPlayer(player1, day1);
-
-      // Advance to Day 2
+      await setupWinForPlayer(player1);
       await ethers.provider.send("evm_increaseTime", [86400]);
       await ethers.provider.send("evm_mine", []);
+      await setupWinForPlayer(player2);
 
-      // Trigger finalization
-      const day2 = await getCurrentDay();
-      await setupWinForPlayer(player2, day2);
-
-      // Flag player1
       await quizzdle.flagWallet(player1.address, "Test flag");
-
-      // Try to claim all
       await expect(
         quizzdle.connect(player1).claimAllWinnerRewards(30)
       ).to.be.revertedWith("Wallet flagged for abuse");
     });
 
     it("Should respect maxDaysToCheck parameter", async function () {
-      // Day 1: player1 wins
-      const day1 = await getCurrentDay();
-      await setupWinForPlayer(player1, day1);
-
-      // Advance to Day 2
+      await setupWinForPlayer(player1);
       await ethers.provider.send("evm_increaseTime", [86400]);
       await ethers.provider.send("evm_mine", []);
-
-      // Day 2: player1 wins + finalize Day 1
-      const day2 = await getCurrentDay();
-      await setupWinForPlayer(player1, day2);
-
-      // Advance to Day 3
+      await setupWinForPlayer(player1);
       await ethers.provider.send("evm_increaseTime", [86400]);
       await ethers.provider.send("evm_mine", []);
+      await setupWinForPlayer(player2);
 
-      // Trigger Day 2 finalization
-      const day3 = await getCurrentDay();
-      await setupWinForPlayer(player2, day3);
-
-      // With maxDaysToCheck = 1, should only get Day 2 rewards
-      const [totalPending1, unclaimedDays1] = await quizzdle.getTotalPendingRewards(player1.address, 1);
-      expect(unclaimedDays1).to.equal(1);
-
-      // With maxDaysToCheck = 30, should get both days
-      const [totalPending30, unclaimedDays30] = await quizzdle.getTotalPendingRewards(player1.address, 30);
-      expect(unclaimedDays30).to.equal(2);
-      expect(totalPending30).to.be.greaterThan(totalPending1);
-    });
-
-    it("Should skip already claimed days", async function () {
-      // Day 1: player1 wins
-      const day1 = await getCurrentDay();
-      await setupWinForPlayer(player1, day1);
-
-      // Advance to Day 2
-      await ethers.provider.send("evm_increaseTime", [86400]);
-      await ethers.provider.send("evm_mine", []);
-
-      // Trigger finalization + play day 2
-      const day2 = await getCurrentDay();
-      await setupWinForPlayer(player1, day2);
-
-      // Claim Day 1 individually
-      await quizzdle.connect(player1).claimWinnerRewards(day1);
-
-      // Advance to Day 3
-      await ethers.provider.send("evm_increaseTime", [86400]);
-      await ethers.provider.send("evm_mine", []);
-
-      // Trigger Day 2 finalization
-      const day3 = await getCurrentDay();
-      await setupWinForPlayer(player2, day3);
-
-      // Total pending should only show Day 2 (Day 1 already claimed)
-      const [totalPending, unclaimedDays] = await quizzdle.getTotalPendingRewards(player1.address, 30);
-      expect(unclaimedDays).to.equal(1);
-
-      // Claim remaining
-      const day2Pending = await quizzdle.getPendingWinnerRewards(player1.address, day2);
-      expect(totalPending).to.equal(day2Pending);
+      const [, count1] = await quizzdle.getTotalPendingRewards(player1.address, 1);
+      const [, count30] = await quizzdle.getTotalPendingRewards(player1.address, 30);
+      expect(count1).to.equal(1);
+      expect(count30).to.equal(2);
     });
 
     it("Should return zero for player with no wins", async function () {
@@ -1152,13 +767,7 @@ describe("Quizzdle", function () {
     });
 
     it("Should skip unfinalized days", async function () {
-      // Day 1: player1 wins (not finalized yet)
-      const day1 = await getCurrentDay();
-      await setupWinForPlayer(player1, day1);
-
-      // Don't advance time - day is not finalized
-
-      // Should return 0 pending (day not finalized)
+      await setupWinForPlayer(player1);
       const [totalPending, unclaimedDays] = await quizzdle.getTotalPendingRewards(player1.address, 30);
       expect(totalPending).to.equal(0);
       expect(unclaimedDays).to.equal(0);

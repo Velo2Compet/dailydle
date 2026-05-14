@@ -5,11 +5,11 @@ require("dotenv").config({ path: path.resolve(process.cwd(), ".env.local") });
 /**
  * Script de test Jour 1 - Version Salted
  *
- * Ce script simule une journée d'activité avec le système de hash salté:
- * - Déployer crée le code referral "caca"
- * - Test wallet s'inscrit avec ce code
- * - Les deux joueurs font des guesses
- * - Owner ajoute un bonus à la pool du jour
+ * ⚠️ OBSOLÈTE — ce script utilise l'ancienne ABI submitSaltedGuess(_, saltedGuess,
+ * commitment, signature, shouldFlag). Le nouveau contrat expose
+ * submitSaltedGuess(_, saltedGuess, isCorrect, shouldFlag, signature) et la
+ * signature serveur est liée à address(this). À réécrire avant utilisation
+ * sur le nouveau déploiement.
  *
  * Usage: npx hardhat run smart-contracts/test/test-day1-salted.js --network base-sepolia
  */

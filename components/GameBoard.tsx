@@ -181,7 +181,10 @@ export function GameBoard({ collection }: GameBoardProps) {
     error: gameError,
     isGuessPending,
     currentDay,
+    hasSessionSignature,
+    isSigningSession,
     submitGuess,
+    signSession,
     clearError,
     refresh,
   } = useSecureGame(collection);
@@ -562,45 +565,69 @@ export function GameBoard({ collection }: GameBoardProps) {
                 <p className="text-center text-white mb-4">
                   Connect your wallet to start playing
                 </p>
+              ) : !hasSessionSignature ? (
+                <p className="text-center text-white mb-4">
+                  Sign the daily session to start playing — one signature for the whole day, all collections.
+                </p>
               ) : (
                 <p className="text-center text-white mb-4">Search and choose a character to get started...</p>
               )}
-              <div className="flex flex-row items-center gap-3">
-                <div className="flex-1">
-                  <CharacterSelector
-                    characters={collection.characters || []}
-                    onSelect={handleCharacterSelect}
-                    disabled={isLoading || isGuessPending || gameState.isGameOver || !isConnected}
-                    disabledCharacters={gameState.guesses.map(g => g.characterId)}
-                  />
-                </div>
 
-                {/* Submit button */}
-                <div className="h-12 flex items-center">
-                  {!isConnected ? (
-                    <WalletButton fullWidth={false} className="h-12 px-6" />
-                  ) : (
-                    <Button
-                      onClick={handleGuess}
-                      disabled={
-                        !selectedCharacterId ||
-                        isLoading ||
-                        isGuessPending ||
-                        gameState.isGameOver ||
-                        alreadyGuessed(selectedCharacterId)
-                      }
-                      className="!h-12 !w-12 !p-0 !px-0 !py-0 flex items-center justify-center"
-                      aria-label="Submit guess"
-                    >
-                      {isLoading || isGuessPending ? (
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                      ) : (
-                        <Send className="w-5 h-5" />
-                      )}
-                    </Button>
-                  )}
+              {isConnected && !hasSessionSignature ? (
+                <div className="flex justify-center">
+                  <Button
+                    onClick={() => signSession()}
+                    disabled={isSigningSession}
+                    className="h-12 px-6"
+                    aria-label="Sign daily session"
+                  >
+                    {isSigningSession ? (
+                      <span className="flex items-center gap-2">
+                        <Loader2 className="w-5 h-5 animate-spin" /> Waiting for wallet…
+                      </span>
+                    ) : (
+                      "Sign session to play"
+                    )}
+                  </Button>
                 </div>
-              </div>
+              ) : (
+                <div className="flex flex-row items-center gap-3">
+                  <div className="flex-1">
+                    <CharacterSelector
+                      characters={collection.characters || []}
+                      onSelect={handleCharacterSelect}
+                      disabled={isLoading || isGuessPending || gameState.isGameOver || !isConnected}
+                      disabledCharacters={gameState.guesses.map(g => g.characterId)}
+                    />
+                  </div>
+
+                  {/* Submit button */}
+                  <div className="h-12 flex items-center">
+                    {!isConnected ? (
+                      <WalletButton fullWidth={false} className="h-12 px-6" />
+                    ) : (
+                      <Button
+                        onClick={handleGuess}
+                        disabled={
+                          !selectedCharacterId ||
+                          isLoading ||
+                          isGuessPending ||
+                          gameState.isGameOver ||
+                          alreadyGuessed(selectedCharacterId)
+                        }
+                        className="!h-12 !w-12 !p-0 !px-0 !py-0 flex items-center justify-center"
+                        aria-label="Submit guess"
+                      >
+                        {isLoading || isGuessPending ? (
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                          <Send className="w-5 h-5" />
+                        )}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Selected character display - full width */}
               {selectedCharacterId && selectedCharacterName && (

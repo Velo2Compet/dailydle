@@ -53,11 +53,11 @@ export interface QuizzdleInterface extends Interface {
       | "dayFinalized"
       | "emergencyWithdraw"
       | "feePerGuess"
+      | "finalizeDay"
       | "flagReason"
       | "flagWallet"
       | "flaggedWallets"
       | "getAttemptsToday"
-      | "getCommitment"
       | "getCurrentDay"
       | "getDayPool"
       | "getPendingWinnerRewards"
@@ -102,7 +102,6 @@ export interface QuizzdleInterface extends Interface {
 
   getEvent(
     nameOrSignatureOrTopic:
-      | "CommitmentSet"
       | "DailyBonusAdded"
       | "SaltedGuessMade"
       | "WalletFlagged"
@@ -163,6 +162,10 @@ export interface QuizzdleInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "finalizeDay",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
     functionFragment: "flagReason",
     values: [AddressLike]
   ): string;
@@ -176,10 +179,6 @@ export interface QuizzdleInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "getAttemptsToday",
-    values: [AddressLike, BigNumberish]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "getCommitment",
     values: [AddressLike, BigNumberish]
   ): string;
   encodeFunctionData(
@@ -278,7 +277,7 @@ export interface QuizzdleInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "submitSaltedGuess",
-    values: [BigNumberish, BytesLike, BytesLike, BytesLike, boolean]
+    values: [BigNumberish, BytesLike, boolean, boolean, BytesLike]
   ): string;
   encodeFunctionData(
     functionFragment: "totalFlaggedWallets",
@@ -386,6 +385,10 @@ export interface QuizzdleInterface extends Interface {
     functionFragment: "feePerGuess",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(
+    functionFragment: "finalizeDay",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "flagReason", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "flagWallet", data: BytesLike): Result;
   decodeFunctionResult(
@@ -394,10 +397,6 @@ export interface QuizzdleInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "getAttemptsToday",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "getCommitment",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -536,31 +535,6 @@ export interface QuizzdleInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "withdraw", data: BytesLike): Result;
-}
-
-export namespace CommitmentSetEvent {
-  export type InputTuple = [
-    player: AddressLike,
-    collectionId: BigNumberish,
-    day: BigNumberish,
-    commitment: BytesLike
-  ];
-  export type OutputTuple = [
-    player: string,
-    collectionId: bigint,
-    day: bigint,
-    commitment: string
-  ];
-  export interface OutputObject {
-    player: string;
-    collectionId: bigint;
-    day: bigint;
-    commitment: string;
-  }
-  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
-  export type Filter = TypedDeferredTopicFilter<Event>;
-  export type Log = TypedEventLog<Event>;
-  export type LogDescription = TypedLogDescription<Event>;
 }
 
 export namespace DailyBonusAddedEvent {
@@ -745,6 +719,8 @@ export interface Quizzdle extends BaseContract {
 
   feePerGuess: TypedContractMethod<[], [bigint], "view">;
 
+  finalizeDay: TypedContractMethod<[_day: BigNumberish], [void], "nonpayable">;
+
   flagReason: TypedContractMethod<[arg0: AddressLike], [string], "view">;
 
   flagWallet: TypedContractMethod<
@@ -758,12 +734,6 @@ export interface Quizzdle extends BaseContract {
   getAttemptsToday: TypedContractMethod<
     [_player: AddressLike, _collectionId: BigNumberish],
     [bigint],
-    "view"
-  >;
-
-  getCommitment: TypedContractMethod<
-    [_player: AddressLike, _collectionId: BigNumberish],
-    [string],
     "view"
   >;
 
@@ -827,13 +797,7 @@ export interface Quizzdle extends BaseContract {
 
   getUserSession: TypedContractMethod<
     [_player: AddressLike, _collectionId: BigNumberish, _day: BigNumberish],
-    [
-      [string, boolean, bigint] & {
-        commitment: string;
-        hasWonToday: boolean;
-        attemptsToday: bigint;
-      }
-    ],
+    [[boolean, bigint] & { hasWonToday: boolean; attemptsToday: bigint }],
     "view"
   >;
 
@@ -918,9 +882,9 @@ export interface Quizzdle extends BaseContract {
     [
       _collectionId: BigNumberish,
       _saltedGuess: BytesLike,
-      _commitment: BytesLike,
-      _serverSignature: BytesLike,
-      _shouldFlag: boolean
+      _isCorrect: boolean,
+      _shouldFlag: boolean,
+      _serverSignature: BytesLike
     ],
     [[boolean, bigint] & { isCorrect: boolean; attempts: bigint }],
     "payable"
@@ -956,7 +920,7 @@ export interface Quizzdle extends BaseContract {
 
   userSessions: TypedContractMethod<
     [arg0: AddressLike, arg1: BigNumberish, arg2: BigNumberish],
-    [[string, boolean] & { commitment: string; hasWonToday: boolean }],
+    [boolean],
     "view"
   >;
 
@@ -1022,6 +986,9 @@ export interface Quizzdle extends BaseContract {
     nameOrSignature: "feePerGuess"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
+    nameOrSignature: "finalizeDay"
+  ): TypedContractMethod<[_day: BigNumberish], [void], "nonpayable">;
+  getFunction(
     nameOrSignature: "flagReason"
   ): TypedContractMethod<[arg0: AddressLike], [string], "view">;
   getFunction(
@@ -1039,13 +1006,6 @@ export interface Quizzdle extends BaseContract {
   ): TypedContractMethod<
     [_player: AddressLike, _collectionId: BigNumberish],
     [bigint],
-    "view"
-  >;
-  getFunction(
-    nameOrSignature: "getCommitment"
-  ): TypedContractMethod<
-    [_player: AddressLike, _collectionId: BigNumberish],
-    [string],
     "view"
   >;
   getFunction(
@@ -1117,13 +1077,7 @@ export interface Quizzdle extends BaseContract {
     nameOrSignature: "getUserSession"
   ): TypedContractMethod<
     [_player: AddressLike, _collectionId: BigNumberish, _day: BigNumberish],
-    [
-      [string, boolean, bigint] & {
-        commitment: string;
-        hasWonToday: boolean;
-        attemptsToday: bigint;
-      }
-    ],
+    [[boolean, bigint] & { hasWonToday: boolean; attemptsToday: bigint }],
     "view"
   >;
   getFunction(
@@ -1210,9 +1164,9 @@ export interface Quizzdle extends BaseContract {
     [
       _collectionId: BigNumberish,
       _saltedGuess: BytesLike,
-      _commitment: BytesLike,
-      _serverSignature: BytesLike,
-      _shouldFlag: boolean
+      _isCorrect: boolean,
+      _shouldFlag: boolean,
+      _serverSignature: BytesLike
     ],
     [[boolean, bigint] & { isCorrect: boolean; attempts: bigint }],
     "payable"
@@ -1251,7 +1205,7 @@ export interface Quizzdle extends BaseContract {
     nameOrSignature: "userSessions"
   ): TypedContractMethod<
     [arg0: AddressLike, arg1: BigNumberish, arg2: BigNumberish],
-    [[string, boolean] & { commitment: string; hasWonToday: boolean }],
+    [boolean],
     "view"
   >;
   getFunction(
@@ -1272,13 +1226,6 @@ export interface Quizzdle extends BaseContract {
     nameOrSignature: "withdraw"
   ): TypedContractMethod<[_to: AddressLike], [void], "nonpayable">;
 
-  getEvent(
-    key: "CommitmentSet"
-  ): TypedContractEvent<
-    CommitmentSetEvent.InputTuple,
-    CommitmentSetEvent.OutputTuple,
-    CommitmentSetEvent.OutputObject
-  >;
   getEvent(
     key: "DailyBonusAdded"
   ): TypedContractEvent<
@@ -1316,17 +1263,6 @@ export interface Quizzdle extends BaseContract {
   >;
 
   filters: {
-    "CommitmentSet(address,uint256,uint256,bytes32)": TypedContractEvent<
-      CommitmentSetEvent.InputTuple,
-      CommitmentSetEvent.OutputTuple,
-      CommitmentSetEvent.OutputObject
-    >;
-    CommitmentSet: TypedContractEvent<
-      CommitmentSetEvent.InputTuple,
-      CommitmentSetEvent.OutputTuple,
-      CommitmentSetEvent.OutputObject
-    >;
-
     "DailyBonusAdded(uint256,uint256,address)": TypedContractEvent<
       DailyBonusAddedEvent.InputTuple,
       DailyBonusAddedEvent.OutputTuple,

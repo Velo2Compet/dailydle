@@ -18,17 +18,17 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { categoryId } = await params;
   const id = parseInt(categoryId, 10);
   if (Number.isNaN(id) || id < 1) {
-    return { title: "Game – Quizzdle Onchain" };
+    return { title: "Game - Quizzdle Onchain" };
   }
   try {
     const raw = await fetchCategoryById(id);
     const name = raw?.name ?? "Game";
     return {
-      title: `${name} – Quizzdle Onchain`,
+      title: `${name} - Quizzdle Onchain`,
       description: `Guess the daily character in ${name}.`,
     };
   } catch {
-    return { title: "Game – Quizzdle Onchain" };
+    return { title: "Game - Quizzdle Onchain" };
   }
 }
 

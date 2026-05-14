@@ -12,6 +12,7 @@ export function RootProvider({ children }: { children: ReactNode }) {
       {...(apiKey && { apiKey })}
       chain={base}
       config={{
+        analytics: false,
         appearance: {
           mode: "auto",
         },

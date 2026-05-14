@@ -1,5 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyMessage, createPublicClient, http, parseAbi, keccak256, encodePacked } from "viem";
+import {
+  verifyMessage,
+  createPublicClient,
+  http,
+  parseAbi,
+  keccak256,
+  encodePacked,
+  isAddress,
+  getAddress,
+} from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { fetchCategoryById } from "@/lib/quizzdle-api";
 import { quizzdleCategoryToCollection } from "@/utils/quizzdle-transform";
@@ -10,6 +19,16 @@ import {
   getSessionMessage,
 } from "@/lib/salted-guess";
 import { APP_CHAIN, RPC_URL } from "@/lib/chain-config";
+import {
+  setPendingReveal,
+  incrementInflight,
+  decrementInflight,
+  incrementTotal,
+  decrementTotal,
+  peekTotal,
+  peekInflight,
+} from "@/lib/pending-reveals";
+import { trackDeviceWallet } from "@/lib/device-tracking";
 import type { AttributeComparison, Character } from "@/types/game";
 
 // Contract configuration
@@ -17,20 +36,30 @@ const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string
 const SALT_DECRYPT = process.env.SALT_DECRYPT as `0x${string}`;
 const SERVER_PRIVATE_KEY = process.env.SERVER_PRIVATE_KEY as `0x${string}`;
 
-// Rate limiting: track hash requests per user/collection/day
-// In production, use Redis or a database
-const hashRequestCounts = new Map<string, number>();
-const MAX_HASH_REQUESTS_PER_SESSION = 50; // Limite généreuse mais empêche le brute-force massif
+// Rate limiting: cap concurrent unproven guesses per (player, collection, day).
+// `inflight` only grows when a guess is issued and not yet proven on-chain via
+// /api/reveal, so a legitimate player (1 guess → 1 tx → 1 reveal) stays at 0–1.
+// An attacker spamming the endpoint without paying hits the cap quickly.
+//
+// Reason for the soft total cap: even a paying player can't reasonably need
+// more than this many guesses for a single day — a runaway total signals an
+// automated scraper trying to enumerate by characterId.
+// 5 concurrent unproven guesses leaves headroom for a user retrying or
+// switching collections mid-tx without locking them out. The on-chain
+// `hasWonToday` ends the game on the first correct guess, so a focused
+// player rarely needs more than a couple inflight at once.
+const MAX_INFLIGHT_GUESSES = 5;
 
-// Multi-wallet detection: track device -> wallets mapping
-// In production, use Redis or a database with persistence
-const deviceWalletMap = new Map<string, Set<string>>(); // deviceId -> Set of wallet addresses
-const deviceFirstWalletMap = new Map<string, string>(); // deviceId -> first wallet address (protected)
-const MULTI_WALLET_THRESHOLD = 2; // Flag after this many wallets on same device
+// 15 attempts/day/collection: an honest player who uses the attribute
+// hints from /api/reveal converges in 5–8 tries; 15 is generous.
+// Anything higher gives a brute-forcer enough room to enumerate a small
+// collection (~50 chars) outright — combined with the off-chain INCR cap
+// and on-chain `hasWonToday`, this is what bounds the worst case here.
+const MAX_TOTAL_GUESSES_PER_DAY = 15;
 
 // ABI for reading contract state
 const saltedContractAbi = parseAbi([
-  "function getUserSession(address _player, uint256 _collectionId, uint256 _day) external view returns (bytes32 commitment, bool hasWonToday, uint256 attemptsToday)",
+  "function getUserSession(address _player, uint256 _collectionId, uint256 _day) external view returns (bool hasWonToday, uint256 attemptsToday)",
   "function feePerGuess() external view returns (uint256)",
 ]);
 
@@ -40,51 +69,41 @@ const publicClient = createPublicClient({
 });
 
 /**
- * Sign the commitment with the server's private key
- * The contract will verify this signature to trust the commitment
- * Now includes shouldFlag for multi-wallet detection
+ * Sign the guess attestation with the server's private key.
+ * The signature attests on-chain that, for this (contract, player, day, collection),
+ * the provided saltedGuess is/isn't the correct answer, and whether to flag.
+ *
+ * IMPORTANT: this MUST mirror the on-chain hash exactly:
+ *   keccak256(address(this), player, collectionId, day, saltedGuess, isCorrect, shouldFlag)
  */
-async function signCommitment(
+async function signGuessAttestation(
+  contractAddress: string,
   playerAddress: string,
   collectionId: number,
   day: number,
-  commitment: string,
+  saltedGuess: string,
+  isCorrect: boolean,
   shouldFlag: boolean
 ): Promise<string> {
   const account = privateKeyToAccount(SERVER_PRIVATE_KEY);
 
-  // Create message hash exactly as the contract does:
-  // keccak256(abi.encodePacked(msg.sender, _collectionId, currentDay, _commitment, _shouldFlag))
   const messageHash = keccak256(
     encodePacked(
-      ["address", "uint256", "uint256", "bytes32", "bool"],
-      [playerAddress as `0x${string}`, BigInt(collectionId), BigInt(day), commitment as `0x${string}`, shouldFlag]
+      ["address", "address", "uint256", "uint256", "bytes32", "bool", "bool"],
+      [
+        contractAddress as `0x${string}`,
+        playerAddress as `0x${string}`,
+        BigInt(collectionId),
+        BigInt(day),
+        saltedGuess as `0x${string}`,
+        isCorrect,
+        shouldFlag,
+      ]
     )
   );
 
-  // Sign with Ethereum prefix (as per EIP-191)
-  const signature = await account.signMessage({
-    message: { raw: messageHash },
-  });
-
-  return signature;
-}
-
-/**
- * Compute the commitment hash for the daily character
- * commitment = keccak256(dailyCharId, sessionSignature, SALT_DECRYPT)
- */
-function computeCommitment(
-  dailyCharacterId: number,
-  sessionSignature: string,
-  saltDecrypt: string
-): string {
-  return keccak256(
-    encodePacked(
-      ["uint256", "bytes", "bytes32"],
-      [BigInt(dailyCharacterId), sessionSignature as `0x${string}`, saltDecrypt as `0x${string}`]
-    )
-  );
+  // Sign with Ethereum prefix (EIP-191)
+  return account.signMessage({ message: { raw: messageHash } });
 }
 
 /**
@@ -152,73 +171,34 @@ function compareAttributesSecure(
 }
 
 /**
- * Track device-wallet association and detect multi-wallet usage
- * Returns warning info if multiple wallets detected
- *
- * Important: Only flags wallets that are NOT the first one on the device
- * The first wallet stays protected and can claim rewards
- */
-function trackDeviceWallet(deviceId: string, walletAddress: string): {
-  isMultiWallet: boolean;
-  walletsOnDevice: string[];
-  isNewWalletOnDevice: boolean;
-  isFirstWalletOnDevice: boolean;
-} {
-  const address = walletAddress.toLowerCase();
-
-  // Get or create wallet set for this device
-  if (!deviceWalletMap.has(deviceId)) {
-    deviceWalletMap.set(deviceId, new Set());
-  }
-  const walletsOnDevice = deviceWalletMap.get(deviceId)!;
-
-  // Track if this is a new wallet on this device
-  const isNewWalletOnDevice = !walletsOnDevice.has(address);
-
-  // Add wallet to device tracking
-  if (isNewWalletOnDevice) {
-    walletsOnDevice.add(address);
-
-    // Track the FIRST wallet on this device (it stays protected)
-    if (!deviceFirstWalletMap.has(deviceId)) {
-      deviceFirstWalletMap.set(deviceId, address);
-    }
-  }
-
-  const walletsList = Array.from(walletsOnDevice);
-  const firstWallet = deviceFirstWalletMap.get(deviceId);
-  const isFirstWalletOnDevice = firstWallet === address;
-
-  return {
-    isMultiWallet: walletsList.length >= MULTI_WALLET_THRESHOLD,
-    walletsOnDevice: walletsList,
-    isNewWalletOnDevice,
-    isFirstWalletOnDevice,
-  };
-}
-
-/**
  * POST /api/guess
  *
- * Retourne le hash salé pour un guess + commitment + signature serveur
- * L'USER soumettra ensuite TOUT en une seule transaction
+ * Phase 1 of the 2-phase guess flow. Returns ONLY what is required to
+ * build the on-chain transaction:
+ *   - saltedGuess        (opaque hash, safe to expose)
+ *   - isCorrect          (the signed bit; must travel as an arg to the
+ *                         contract call, so it has to be exposed here)
+ *   - shouldFlag         (idem)
+ *   - serverSignature    (signed attestation)
+ *   - feePerGuess        (so the wallet can attach the right value)
+ *
+ * Sensitive data — `comparisons`, `dailyCharacter`, `guessedCharacter` —
+ * is NEVER returned in this response. It is stashed server-side in
+ * `pending-reveals`, keyed by saltedGuess, and only released by
+ * /api/reveal after the player has proven on-chain payment.
+ *
+ * This blocks the previous "ask without paying then brute-force"
+ * attack: an attacker who calls this endpoint repeatedly learns only
+ * the isCorrect bit (each test still costs nothing here, but cannot be
+ * leveraged with attribute hints) and is rate-limited by the inflight
+ * cap until they actually pay a tx.
  *
  * Body:
  * - playerAddress: string
  * - collectionId: number
- * - characterId: number (the character being guessed)
- * - sessionSignature: string (signature of session message)
- * - deviceId: string (optional, for multi-wallet detection)
- *
- * Response:
- * - saltedGuess: string (hash du guess)
- * - commitment: string (hash de la réponse correcte, signé par le serveur)
- * - serverSignature: string (signature du serveur sur le commitment)
- * - comparisons: AttributeComparison[]
- * - guessedCharacter: { id, name, imageUrl }
- * - dailyCharacter?: { id, name, imageUrl } (only if correct)
- * - feePerGuess: string (wei)
- * - multiWalletWarning?: boolean (if multi-wallet detected)
+ * - characterId: number
+ * - sessionSignature: string
+ * - deviceId?: string
  */
 export async function POST(request: NextRequest) {
   try {
@@ -235,7 +215,7 @@ export async function POST(request: NextRequest) {
     const { playerAddress, collectionId, characterId, sessionSignature, deviceId } = body;
 
     // Validate inputs
-    if (!playerAddress || typeof playerAddress !== "string" || !playerAddress.startsWith("0x")) {
+    if (!playerAddress || typeof playerAddress !== "string" || !isAddress(playerAddress)) {
       return NextResponse.json(
         { error: "Invalid player address" },
         { status: 400 }
@@ -281,32 +261,53 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Track device-wallet association for multi-wallet detection
-    let multiWalletInfo: { isMultiWallet: boolean; walletsOnDevice: string[]; isNewWalletOnDevice: boolean; isFirstWalletOnDevice: boolean } | null = null;
+    // Track device-wallet association for multi-wallet detection (Redis-backed).
+    let multiWalletInfo: {
+      isMultiWallet: boolean;
+      walletsOnDevice: string[];
+      isNewWalletOnDevice: boolean;
+      isFirstWalletOnDevice: boolean;
+      firstWallet: string | null;
+    } | null = null;
     if (deviceId && typeof deviceId === "string" && deviceId.length > 0) {
-      multiWalletInfo = trackDeviceWallet(deviceId, playerAddress);
+      multiWalletInfo = await trackDeviceWallet(deviceId, playerAddress);
 
-      // Log multi-wallet detection for monitoring
       if (multiWalletInfo.isMultiWallet && multiWalletInfo.isNewWalletOnDevice) {
-        console.warn(`[MULTI-WALLET] Device ${deviceId.slice(0, 8)}... has ${multiWalletInfo.walletsOnDevice.length} wallets:`, multiWalletInfo.walletsOnDevice);
-        console.warn(`[MULTI-WALLET] First wallet (protected): ${deviceFirstWalletMap.get(deviceId)}`);
-        console.warn(`[MULTI-WALLET] Current wallet: ${playerAddress.toLowerCase()} - Will be flagged: ${!multiWalletInfo.isFirstWalletOnDevice}`);
+        console.warn(
+          `[MULTI-WALLET] Device ${deviceId.slice(0, 8)}… now has ${multiWalletInfo.walletsOnDevice.length} wallets. First (protected): ${multiWalletInfo.firstWallet}. New: ${playerAddress.toLowerCase()} — flag=${!multiWalletInfo.isFirstWalletOnDevice}`
+        );
       }
     }
 
-    // Rate limiting: check hash request count
-    const rateLimitKey = `${playerAddress}-${collectionId}-${currentDay}-${sessionSignature.slice(0, 20)}`;
-    const currentCount = hashRequestCounts.get(rateLimitKey) || 0;
+    // Rate-limit key intentionally does NOT include the session signature.
+    // Including it let an attacker bypass the limit by re-signing the
+    // session message (some wallets are non-deterministic, producing a
+    // fresh signature each time).
+    const normalizedPlayer = playerAddress.toLowerCase();
+    const rateLimitKey = `${normalizedPlayer}-${collectionId}-${currentDay}`;
 
-    if (currentCount >= MAX_HASH_REQUESTS_PER_SESSION) {
+    // Cheap pre-check: bail out without doing any expensive work when the
+    // caller is obviously over the cap. The real enforcement is the
+    // atomic INCR + rollback further down, which is race-safe.
+    const [peekedInflight, peekedTotal] = await Promise.all([
+      peekInflight(rateLimitKey),
+      peekTotal(rateLimitKey),
+    ]);
+    if (peekedInflight >= MAX_INFLIGHT_GUESSES) {
       return NextResponse.json(
-        { error: "Too many hash requests. Please start a new session." },
+        {
+          error:
+            "Too many unconfirmed guesses. Confirm a transaction before requesting another guess.",
+        },
         { status: 429 }
       );
     }
-
-    // Increment count
-    hashRequestCounts.set(rateLimitKey, currentCount + 1);
+    if (peekedTotal >= MAX_TOTAL_GUESSES_PER_DAY) {
+      return NextResponse.json(
+        { error: "Daily guess limit reached." },
+        { status: 429 }
+      );
+    }
 
     // Check user session on-chain (to see if already won)
     const session = await publicClient.readContract({
@@ -316,7 +317,7 @@ export async function POST(request: NextRequest) {
       args: [playerAddress as `0x${string}`, BigInt(collectionId), BigInt(currentDay)],
     });
 
-    const [, hasWonToday] = session as [string, boolean, bigint];
+    const [hasWonToday] = session as [boolean, bigint];
 
     // Verify user hasn't already won
     if (hasWonToday) {
@@ -367,30 +368,27 @@ export async function POST(request: NextRequest) {
       saltDecrypt: SALT_DECRYPT,
     });
 
-    // Compute commitment (the correct answer hash)
-    const commitment = computeCommitment(
-      dailyCharacterId,
-      sessionSignature,
-      SALT_DECRYPT
-    );
+    // Determine correctness server-side. The bit is then signed and
+    // bound to the saltedGuess so a client cannot flip it.
+    const isCorrect = characterId === dailyCharacterId;
 
-    // Determine if user should be flagged for multi-wallet
-    // Only flag if: multi-wallet detected AND this is NOT the first wallet on the device
+    // Multi-wallet flag: only if detected AND not the protected first wallet on device
     const shouldFlag = Boolean(multiWalletInfo?.isMultiWallet && !multiWalletInfo?.isFirstWalletOnDevice);
 
-    // Sign the commitment with server's private key (includes shouldFlag)
-    const serverSignature = await signCommitment(
-      playerAddress,
+    // Sign the attestation (contract-bound, anti cross-deploy replay)
+    const checksummedContract = getAddress(CONTRACT_ADDRESS);
+    const checksummedPlayer = getAddress(playerAddress);
+    const serverSignature = await signGuessAttestation(
+      checksummedContract,
+      checksummedPlayer,
       collectionId,
       currentDay,
-      commitment,
+      saltedGuess,
+      isCorrect,
       shouldFlag
     );
 
-    // Check if guess is correct (for comparisons, NOT revealed to user directly)
-    const isCorrect = characterId === dailyCharacterId;
-
-    // Get guessed character for comparison
+    // Get guessed character (will be stashed for the reveal phase)
     const guessedCharacter = collection.characters.find((c) => c.id === characterId);
     if (!guessedCharacter) {
       return NextResponse.json(
@@ -422,55 +420,95 @@ export async function POST(request: NextRequest) {
       functionName: "feePerGuess",
     });
 
-    // Build response
-    const response: {
-      saltedGuess: string;
-      commitment: string;
-      serverSignature: string;
-      comparisons: AttributeComparison[];
-      guessedCharacter: {
-        id: number;
-        name: string;
-        imageUrl?: string;
-      };
-      dailyCharacter?: {
-        id: number;
-        name: string;
-        imageUrl?: string;
-      };
-      feePerGuess: string;
-      hashRequestsRemaining: number;
-      shouldFlag: boolean;
-      multiWalletWarning?: boolean;
-      walletsOnDevice?: string[];
-    } = {
-      saltedGuess,
-      commitment,
-      serverSignature,
-      comparisons,
-      guessedCharacter: {
-        id: guessedCharacter.id,
-        name: guessedCharacter.name,
-        imageUrl: guessedCharacter.imageUrl,
-      },
-      feePerGuess: feePerGuess.toString(),
-      hashRequestsRemaining: MAX_HASH_REQUESTS_PER_SESSION - (currentCount + 1),
-      shouldFlag, // For contract auto-flag
-    };
-
-    // Add multi-wallet warning if detected
-    if (shouldFlag) {
-      response.multiWalletWarning = true;
-      response.walletsOnDevice = multiWalletInfo?.walletsOnDevice;
+    // Atomic INCR is the race-safe enforcement. INCR returns the
+    // post-increment value, so we compare it against the cap and roll
+    // back if exceeded. This closes the TOCTOU window left by the
+    // earlier peek-based pre-check.
+    const newInflight = await incrementInflight(rateLimitKey);
+    if (newInflight > MAX_INFLIGHT_GUESSES) {
+      await decrementInflight(rateLimitKey);
+      return NextResponse.json(
+        {
+          error:
+            "Too many unconfirmed guesses. Confirm a transaction before requesting another guess.",
+        },
+        { status: 429 }
+      );
     }
 
-    // Only reveal daily character if player guessed correctly
-    if (isCorrect) {
-      response.dailyCharacter = {
-        id: dailyCharacter.id,
-        name: dailyCharacter.name,
-        imageUrl: dailyCharacter.imageUrl,
-      };
+    const newTotal = await incrementTotal(rateLimitKey);
+    if (newTotal > MAX_TOTAL_GUESSES_PER_DAY) {
+      // Roll BOTH counters back: we never persist the pending reveal,
+      // so neither slot should be considered taken.
+      await Promise.all([
+        decrementInflight(rateLimitKey),
+        decrementTotal(rateLimitKey),
+      ]);
+      return NextResponse.json(
+        { error: "Daily guess limit reached." },
+        { status: 429 }
+      );
+    }
+
+    // Stash sensitive data server-side, keyed by the opaque saltedGuess.
+    // /api/reveal will hand this over after on-chain payment is proven.
+    //
+    // If the Redis SET fails after we've already INCRed inflight + total,
+    // we must roll both counters back — otherwise the user's slot stays
+    // reserved for the full TTL (24h) over a transient Redis hiccup and
+    // they get locked out.
+    try {
+      await setPendingReveal(saltedGuess, {
+        comparisons,
+        guessedCharacter: {
+          id: guessedCharacter.id,
+          name: guessedCharacter.name,
+          imageUrl: guessedCharacter.imageUrl,
+        },
+        dailyCharacter: {
+          id: dailyCharacter.id,
+          name: dailyCharacter.name,
+          imageUrl: dailyCharacter.imageUrl,
+        },
+        isCorrect,
+        shouldFlag,
+        playerAddress: normalizedPlayer,
+        collectionId,
+        day: currentDay,
+        rateLimitKey,
+      });
+    } catch (err) {
+      // Best-effort rollback. We swallow rollback errors because the
+      // original SET failure is the one worth surfacing.
+      await Promise.all([
+        decrementInflight(rateLimitKey).catch(() => {}),
+        decrementTotal(rateLimitKey).catch(() => {}),
+      ]);
+      throw err;
+    }
+
+    // Minimal response: just what's needed for the on-chain tx, plus the
+    // signed multi-wallet flag warning. No attribute hints, no daily
+    // character, no guessed character details.
+    const response: {
+      saltedGuess: string;
+      isCorrect: boolean;
+      shouldFlag: boolean;
+      serverSignature: string;
+      feePerGuess: string;
+      inflightRemaining: number;
+      multiWalletWarning?: boolean;
+    } = {
+      saltedGuess,
+      isCorrect,
+      shouldFlag,
+      serverSignature,
+      feePerGuess: feePerGuess.toString(),
+      inflightRemaining: Math.max(0, MAX_INFLIGHT_GUESSES - newInflight),
+    };
+
+    if (shouldFlag) {
+      response.multiWalletWarning = true;
     }
 
     return NextResponse.json(response);

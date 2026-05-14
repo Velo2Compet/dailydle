@@ -5,6 +5,9 @@ require("dotenv").config({ path: path.resolve(process.cwd(), ".env.local") });
 /**
  * Script de test Jour 2 - Version Salted
  *
+ * ⚠️ OBSOLÈTE — ABI submitSaltedGuess obsolète (voir test-day1-salted.js).
+ * À réécrire avant usage sur le nouveau contrat.
+ *
  * Ce script:
  * - Fait un guess pour déclencher la finalisation du Jour 1
  * - Teste claimAllWinnerRewards (nouveau!)

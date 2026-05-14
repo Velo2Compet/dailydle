@@ -15,7 +15,7 @@ const POOL_ABI = parseAbi([
 ]);
 
 export function useDailyPool() {
-  const { address, isConnected } = useAccount();
+  const { isConnected } = useAccount();
 
   // Get current day
   const { data: currentDay } = useReadContract({

@@ -3,37 +3,36 @@ import { NextRequest, NextResponse } from "next/server";
 
 const client = createClient();
 
-// Helper function to determine the correct domain for JWT verification
-function getUrlHost(request: NextRequest): string {
-  // First try to get the origin from the Origin header (most reliable for CORS requests)
-  const origin = request.headers.get("origin");
-  if (origin) {
+// Resolve the host the JWT must have been issued for.
+//
+// We do NOT consult the request's Origin/Host headers: both are
+// attacker-controlled (Origin trivially via fetch options, Host via
+// non-browser clients). If we accepted whatever the caller advertised,
+// an attacker could mint a Farcaster JWT for evil.com and pass it
+// alongside `Origin: evil.com` — verifyJwt would happily accept it
+// even though the JWT was never intended for our app.
+//
+// Production: pin to NEXT_PUBLIC_URL.
+// Vercel preview: the per-deploy URL is set server-side in VERCEL_URL.
+// Local dev: localhost.
+function getExpectedHost(): string {
+  const explicit = process.env.NEXT_PUBLIC_URL;
+  if (process.env.VERCEL_ENV === "production" && explicit) {
     try {
-      const url = new URL(origin);
-      return url.host;
-    } catch (error) {
-      console.warn("Invalid origin header:", origin, error);
+      return new URL(explicit).host;
+    } catch {
+      // fall through to next branches
     }
   }
-
-  // Fallback to Host header
-  const host = request.headers.get("host");
-  if (host) {
-    return host;
+  if (process.env.VERCEL_URL) return process.env.VERCEL_URL;
+  if (explicit) {
+    try {
+      return new URL(explicit).host;
+    } catch {
+      // fall through
+    }
   }
-
-  // Final fallback to environment variables (your original logic)
-  let urlValue: string;
-  if (process.env.VERCEL_ENV === "production") {
-    urlValue = process.env.NEXT_PUBLIC_URL!;
-  } else if (process.env.VERCEL_URL) {
-    urlValue = `https://${process.env.VERCEL_URL}`;
-  } else {
-    urlValue = "http://localhost:3000";
-  }
-
-  const url = new URL(urlValue);
-  return url.host;
+  return "localhost:3000";
 }
 
 export async function GET(request: NextRequest) {
@@ -47,12 +46,12 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Now we verify the token. `domain` must match the domain of the request.
-    // In our case, we're using the `getUrlHost` function to get the domain of the request
-    // based on the Vercel environment. This will vary depending on your hosting provider.
+    // Pin the verification domain to OUR app (see getExpectedHost). The
+    // JWT carries an `aud` claim — verifyJwt rejects any token issued
+    // for a different domain. This is the load-bearing check.
     const payload = await client.verifyJwt({
       token: authorization.split(" ")[1] as string,
-      domain: getUrlHost(request),
+      domain: getExpectedHost(),
     });
 
     console.log("payload", payload);

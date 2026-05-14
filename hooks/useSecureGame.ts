@@ -10,10 +10,10 @@ import type { Collection, Character, AttributeComparison } from "@/types/game";
 // Contract configuration
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}`;
 
-// Updated ABI with new submitSaltedGuess signature (includes commitment + serverSignature + shouldFlag)
+// ABI with submitSaltedGuess: server attests isCorrect + shouldFlag via signature
 const saltedContractAbi = parseAbi([
-  "function submitSaltedGuess(uint256 _collectionId, bytes32 _saltedGuess, bytes32 _commitment, bytes calldata _serverSignature, bool _shouldFlag) external payable returns (bool isCorrect, uint256 attempts)",
-  "function getUserSession(address _player, uint256 _collectionId, uint256 _day) external view returns (bytes32 commitment, bool hasWonToday, uint256 attemptsToday)",
+  "function submitSaltedGuess(uint256 _collectionId, bytes32 _saltedGuess, bool _isCorrect, bool _shouldFlag, bytes calldata _serverSignature) external payable returns (bool isCorrect, uint256 attempts)",
+  "function getUserSession(address _player, uint256 _collectionId, uint256 _day) external view returns (bool hasWonToday, uint256 attemptsToday)",
   "function feePerGuess() external view returns (uint256)",
   "function getAttemptsToday(address _player, uint256 _collectionId) external view returns (uint256)",
 ]);
@@ -119,14 +119,15 @@ function loadGuessesFromStorage(address: string, collectionId: number, day: numb
 /**
  * Hook for secure salted game flow
  *
- * NEW FLOW (server never pays gas):
+ * Flow (server never pays gas):
  * 1. User signs session message locally (persisted in localStorage)
- * 2. Call submitGuess(characterId) to:
- *    a. Send signature to server
- *    b. Server computes saltedGuess, commitment, and signs commitment
- *    c. Server returns {saltedGuess, commitment, serverSignature, comparisons}
- *    d. User submits ALL to blockchain in ONE transaction
- *    e. Contract verifies server signature and records guess
+ * 2. submitGuess(characterId):
+ *    a. POST /api/guess with sessionSignature + characterId
+ *    b. Server computes saltedGuess, decides isCorrect, signs the attestation
+ *       bound to (contract, player, day, collection, saltedGuess, isCorrect, shouldFlag)
+ *    c. Server returns {saltedGuess, isCorrect, shouldFlag, serverSignature, ...}
+ *    d. User submits all to the contract in one transaction
+ *    e. Contract verifies the signature and records the (correct/wrong) guess
  */
 export function useSecureGame(collection: Collection) {
   const { address, isConnected } = useAccount();
@@ -152,13 +153,26 @@ export function useSecureGame(collection: Collection) {
   const sessionSignatureRef = useRef<string | null>(null);
   const sessionDayRef = useRef<number | null>(null);
   const initializedRef = useRef(false);
+  // Mirror of sessionSignatureRef for reactive UI (button states)
+  const [hasSessionSignature, setHasSessionSignature] = useState(false);
+  const [isSigningSession, setIsSigningSession] = useState(false);
 
-  // Pending guess data (for after tx confirmation)
+  // Pending guess data carried across the tx-confirmation gap.
+  //
+  // We deliberately do NOT store `comparisons` or `dailyCharacter` here:
+  // /api/guess no longer returns them (that was the brute-force leak).
+  // Instead we keep the bits needed to call /api/reveal after the tx is
+  // mined: the saltedGuess, the player's identity, and the guessed
+  // character metadata we already had locally (since the user selected
+  // it from the UI).
   const pendingGuessRef = useRef<{
-    comparisons: AttributeComparison[];
+    saltedGuess: `0x${string}`;
+    isCorrect: boolean;
     guessedCharacter: { id: number; name: string; imageUrl?: string };
-    dailyCharacter?: { id: number; name: string; imageUrl?: string };
   } | null>(null);
+
+  // Guard against double-reveal across re-renders.
+  const revealInFlightRef = useRef<string | null>(null);
 
   // Read fee per guess
   const { data: feePerGuess } = useReadContract({
@@ -195,6 +209,7 @@ export function useSecureGame(collection: Collection) {
     if (savedSignature) {
       sessionSignatureRef.current = savedSignature;
       sessionDayRef.current = currentDay;
+      setHasSessionSignature(true);
     }
 
     // Load saved guesses
@@ -221,7 +236,7 @@ export function useSecureGame(collection: Collection) {
   // Update game state from session data
   useEffect(() => {
     if (sessionData) {
-      const [, hasWon, attempts] = sessionData as [string, boolean, bigint];
+      const [hasWon, attempts] = sessionData as [boolean, bigint];
 
       setGameState((prev) => ({
         ...prev,
@@ -231,52 +246,101 @@ export function useSecureGame(collection: Collection) {
     }
   }, [sessionData]);
 
-  // Handle successful guess transaction
+  // Handle successful guess transaction.
+  //
+  // Two-phase reveal: /api/guess no longer hands over comparisons or the
+  // daily character (that was the brute-force leak). Now that we have an
+  // on-chain receipt, we POST it to /api/reveal which checks the receipt
+  // emitted the matching SaltedGuessMade event before releasing the
+  // attribute hints. Without this proof of payment, no hints come out.
   useEffect(() => {
-    if (isGuessSuccess && pendingGuessRef.current) {
-      const pending = pendingGuessRef.current;
-      const isCorrect = !!pending.dailyCharacter;
+    if (!isGuessSuccess || !pendingGuessRef.current || !guessTxHash || !address) return;
 
+    // Guard against the effect firing twice for the same tx (StrictMode,
+    // dependency churn) — we'd otherwise hit /api/reveal twice and
+    // double-decrement the rate-limit slot.
+    if (revealInFlightRef.current === guessTxHash) return;
+    revealInFlightRef.current = guessTxHash;
+
+    const pending = pendingGuessRef.current;
+
+    (async () => {
+      let comparisons: AttributeComparison[] = [];
+      let revealedDaily: { id: number; name: string; imageUrl?: string } | undefined;
+      let revealError: string | null = null;
+
+      try {
+        const res = await fetch("/api/reveal", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            saltedGuess: pending.saltedGuess,
+            txHash: guessTxHash,
+            playerAddress: address,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || "Failed to reveal guess result");
+        }
+        comparisons = (data.comparisons as AttributeComparison[]) ?? [];
+        revealedDaily = data.dailyCharacter as
+          | { id: number; name: string; imageUrl?: string }
+          | undefined;
+      } catch (err) {
+        console.error("Reveal error:", err);
+        revealError =
+          err instanceof Error ? err.message : "Failed to load guess details";
+      }
+
+      const isCorrect = pending.isCorrect;
       const guessResult: GuessResult = {
         isCorrect,
         characterId: pending.guessedCharacter.id,
         characterName: pending.guessedCharacter.name,
         characterImage: pending.guessedCharacter.imageUrl,
-        comparisons: pending.comparisons,
+        comparisons,
         timestamp: Date.now(),
         attempts: gameState.attemptsToday + 1,
       };
 
       setGameState((prev) => {
         const newGuesses = [...prev.guesses, guessResult];
-
-        // Save guesses to localStorage
         if (address) {
           saveGuessesToStorage(address, collection.id, currentDay, newGuesses);
         }
-
         return {
           ...prev,
           guesses: newGuesses,
           attemptsToday: prev.attemptsToday + 1,
           hasWonToday: isCorrect || prev.hasWonToday,
-          dailyCharacter: pending.dailyCharacter
+          dailyCharacter: revealedDaily
             ? {
-                id: pending.dailyCharacter.id,
-                name: pending.dailyCharacter.name,
-                imageUrl: pending.dailyCharacter.imageUrl,
+                id: revealedDaily.id,
+                name: revealedDaily.name,
+                imageUrl: revealedDaily.imageUrl,
                 attributes: {},
               }
             : prev.dailyCharacter,
           isLoading: false,
+          error: revealError,
         };
       });
 
       pendingGuessRef.current = null;
       resetGuessTx();
       refetchSession();
-    }
-  }, [isGuessSuccess, gameState.attemptsToday, resetGuessTx, refetchSession, address, collection.id, currentDay]);
+    })();
+  }, [
+    isGuessSuccess,
+    guessTxHash,
+    address,
+    gameState.attemptsToday,
+    resetGuessTx,
+    refetchSession,
+    collection.id,
+    currentDay,
+  ]);
 
   /**
    * Ensure we have a valid session signature for today
@@ -294,6 +358,7 @@ export function useSecureGame(collection: Collection) {
       if (savedSignature) {
         sessionSignatureRef.current = savedSignature;
         sessionDayRef.current = currentDay;
+        setHasSessionSignature(true);
         return savedSignature;
       }
     }
@@ -304,6 +369,7 @@ export function useSecureGame(collection: Collection) {
     }
 
     try {
+      setIsSigningSession(true);
       // Sign session message locally (one signature for all collections)
       const message = getSessionMessage(currentDay);
       const signature = await signMessageAsync({ message });
@@ -312,6 +378,7 @@ export function useSecureGame(collection: Collection) {
       sessionSignatureRef.current = signature;
       sessionDayRef.current = currentDay;
       saveSessionToStorage(address, currentDay, signature);
+      setHasSessionSignature(true);
 
       return signature;
     } catch (error) {
@@ -321,13 +388,25 @@ export function useSecureGame(collection: Collection) {
         error: error instanceof Error ? error.message : "Failed to sign session",
       }));
       return null;
+    } finally {
+      setIsSigningSession(false);
     }
   }, [address, isConnected, currentDay, signMessageAsync]);
 
   /**
+   * Public action: trigger the session signing explicitly (used by the
+   * "Sign session" button before character selection, to avoid losing UI
+   * state during a wallet redirect mid-guess).
+   */
+  const signSession = useCallback(async (): Promise<boolean> => {
+    const sig = await ensureSessionSignature();
+    return Boolean(sig);
+  }, [ensureSessionSignature]);
+
+  /**
    * Submit a guess:
    * 1. Ensure we have a session signature
-   * 2. Get saltedGuess + commitment + serverSignature from API
+   * 2. Get saltedGuess + signed isCorrect/shouldFlag attestation from API
    * 3. Submit everything to blockchain in ONE transaction (user pays gas)
    */
   const submitGuess = useCallback(
@@ -357,7 +436,7 @@ export function useSecureGame(collection: Collection) {
           return null;
         }
 
-        // 2. Get salted hash + commitment + server signature from API
+        // 2. Get salted hash + signed (isCorrect, shouldFlag) attestation from API
         // Also send deviceId for multi-wallet detection
         const deviceId = getDeviceId();
 
@@ -390,11 +469,21 @@ export function useSecureGame(collection: Collection) {
           console.warn("[MULTI-WALLET] Warning: Multiple wallets detected on this device");
         }
 
-        // Store pending guess data for after tx confirmation
+        // Stash what we'll need to call /api/reveal once the tx is mined.
+        // The guessed character metadata comes from the local collection
+        // (the user just picked it), not from the API response — /api/guess
+        // no longer returns character details by design.
+        const guessedCharacterLocal = collection.characters?.find(
+          (c) => c.id === characterId
+        );
         pendingGuessRef.current = {
-          comparisons: data.comparisons,
-          guessedCharacter: data.guessedCharacter,
-          dailyCharacter: data.dailyCharacter,
+          saltedGuess: data.saltedGuess as `0x${string}`,
+          isCorrect: Boolean(data.isCorrect),
+          guessedCharacter: {
+            id: characterId,
+            name: guessedCharacterLocal?.name ?? `#${characterId}`,
+            imageUrl: guessedCharacterLocal?.imageUrl,
+          },
         };
 
         // 3. Switch to Base Sepolia if needed
@@ -407,7 +496,8 @@ export function useSecureGame(collection: Collection) {
         }
 
         // 4. Submit EVERYTHING to blockchain in ONE transaction
-        // Note: shouldFlag is signed by server - if multi-wallet detected, user auto-flags themselves!
+        // Le serveur a signé (contract, player, day, collection, saltedGuess, isCorrect, shouldFlag).
+        // L'utilisateur ne peut pas inverser isCorrect ni shouldFlag sans casser la signature.
         await submitGuessAsync({
           address: CONTRACT_ADDRESS,
           abi: saltedContractAbi,
@@ -415,22 +505,25 @@ export function useSecureGame(collection: Collection) {
           args: [
             BigInt(collection.id),
             data.saltedGuess as `0x${string}`,
-            data.commitment as `0x${string}`,
+            data.isCorrect as boolean,
+            data.shouldFlag as boolean,
             data.serverSignature as `0x${string}`,
-            data.shouldFlag as boolean, // Auto-flag if multi-wallet detected
           ],
           value: feePerGuess,
           chainId: APP_CHAIN_ID,
         });
 
-        // Return optimistic result (final update happens in useEffect when tx confirmed)
-        const isCorrect = !!data.dailyCharacter;
+        // Optimistic return: caller only checks for non-null. The full
+        // GuessResult with comparisons lands in state after /api/reveal
+        // completes in the tx-success effect above.
+        const isCorrect = Boolean(data.isCorrect);
+        const localChar = collection.characters?.find((c) => c.id === characterId);
         return {
           isCorrect,
-          characterId: data.guessedCharacter.id,
-          characterName: data.guessedCharacter.name,
-          characterImage: data.guessedCharacter.imageUrl,
-          comparisons: data.comparisons,
+          characterId,
+          characterName: localChar?.name ?? `#${characterId}`,
+          characterImage: localChar?.imageUrl,
+          comparisons: [],
           timestamp: Date.now(),
           attempts: gameState.attemptsToday + 1,
         };
@@ -445,7 +538,7 @@ export function useSecureGame(collection: Collection) {
         return null;
       }
     },
-    [address, isConnected, feePerGuess, collection.id, gameState.hasWonToday, gameState.attemptsToday, ensureSessionSignature, submitGuessAsync, chainId, switchChainAsync]
+    [address, isConnected, feePerGuess, collection.id, collection.characters, gameState.hasWonToday, gameState.attemptsToday, ensureSessionSignature, submitGuessAsync, chainId, switchChainAsync]
   );
 
   /**
@@ -468,9 +561,12 @@ export function useSecureGame(collection: Collection) {
     feePerGuess: feePerGuess ? Number(feePerGuess) : 0,
     isGuessPending,
     currentDay,
+    hasSessionSignature,
+    isSigningSession,
 
     // Actions
     submitGuess,
+    signSession,
     clearError,
     refresh,
   };

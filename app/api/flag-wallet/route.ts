@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createWalletClient, createPublicClient, http, parseAbi } from "viem";
+import { createWalletClient, createPublicClient, http, parseAbi, isAddress } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { APP_CHAIN, RPC_URL } from "@/lib/chain-config";
 
@@ -58,16 +58,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate inputs
-    if (!walletAddress || typeof walletAddress !== "string" || !walletAddress.startsWith("0x")) {
+    if (!walletAddress || typeof walletAddress !== "string" || !isAddress(walletAddress)) {
       return NextResponse.json(
         { error: "Invalid wallet address" },
         { status: 400 }
       );
     }
 
-    if (!reason || typeof reason !== "string" || reason.length === 0) {
+    if (!reason || typeof reason !== "string" || reason.length === 0 || reason.length > 200) {
       return NextResponse.json(
-        { error: "Reason is required" },
+        { error: "Reason is required (1–200 chars)" },
         { status: 400 }
       );
     }
@@ -134,7 +134,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const walletAddress = searchParams.get("address");
 
-    if (!walletAddress || !walletAddress.startsWith("0x")) {
+    if (!walletAddress || !isAddress(walletAddress)) {
       return NextResponse.json(
         { error: "Invalid wallet address" },
         { status: 400 }

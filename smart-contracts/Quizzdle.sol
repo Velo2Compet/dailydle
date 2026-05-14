@@ -9,7 +9,9 @@ pragma solidity ^0.8.24;
  * - Les guesses sont salés avec signature session + SALT_DECRYPT
  * - Impossible pour un observateur de décoder les réponses
  * - Chaque user a des hash uniques par session
- * - L'USER soumet sa propre tx avec le hash + commitment signé par le serveur
+ * - Le serveur signe (player, collection, day, saltedGuess, isCorrect, shouldFlag)
+ *   liés à l'adresse du contrat — la correctness ne dépend plus d'une valeur
+ *   publique manipulable côté client
  * - LE SERVEUR NE PAIE JAMAIS DE GAS
  */
 
@@ -27,14 +29,13 @@ contract Quizzdle {
     }
 
     struct UserSession {
-        bytes32 commitment;          // hash(dailyCharId, sessionSig, SALT_DECRYPT)
         bool hasWonToday;            // A déjà gagné aujourd'hui
     }
 
     // ============ State Variables ============
 
     address public owner;
-    address public server;  // Adresse qui signe les commitments
+    address public server;  // Adresse qui signe les attestations de guess
 
     uint256 public feePerGuess = 1000000000; // 0.000000001 ETH (1 Gwei)
 
@@ -91,13 +92,6 @@ contract Quizzdle {
         uint256 attempts
     );
 
-    event CommitmentSet(
-        address indexed player,
-        uint256 indexed collectionId,
-        uint256 indexed day,
-        bytes32 commitment
-    );
-
     event WinRecorded(
         address indexed player,
         uint256 indexed collectionId,
@@ -136,25 +130,23 @@ contract Quizzdle {
     // ============ User Functions ============
 
     /**
-     * @dev Soumettre un guess salé avec commitment signé par le serveur
-     * L'utilisateur envoie TOUT en une seule transaction:
-     * - Le hash de son guess
-     * - Le commitment (réponse correcte hashée)
-     * - La signature du serveur qui prouve que le commitment est valide
-     * - Flag multi-wallet (si détecté par le serveur, le user s'auto-flag!)
+     * @dev Soumettre un guess salé. La correctness est attestée par le serveur
+     * via une signature liée à l'adresse de ce contrat (anti cross-deploy replay).
      *
      * @param _collectionId Collection ID
-     * @param _saltedGuess hash(guessedCharId, sessionSignature, SALT_DECRYPT)
-     * @param _commitment hash(dailyCharId, sessionSignature, SALT_DECRYPT)
-     * @param _serverSignature Signature du serveur sur (player, collectionId, day, commitment, shouldFlag)
-     * @param _shouldFlag true si multi-wallet détecté (signé par serveur)
+     * @param _saltedGuess  hash(guessedCharId, sessionSignature, SALT_DECRYPT) — opaque on-chain
+     * @param _isCorrect    Bit attesté par le serveur indiquant si _saltedGuess
+     *                      correspond bien au personnage du jour
+     * @param _shouldFlag   true si multi-wallet détecté côté serveur (signé)
+     * @param _serverSignature Signature du serveur sur
+     *        keccak256(address(this), player, collectionId, day, saltedGuess, isCorrect, shouldFlag)
      */
     function submitSaltedGuess(
         uint256 _collectionId,
         bytes32 _saltedGuess,
-        bytes32 _commitment,
-        bytes calldata _serverSignature,
-        bool _shouldFlag
+        bool _isCorrect,
+        bool _shouldFlag,
+        bytes calldata _serverSignature
     ) external payable returns (bool isCorrect, uint256 attempts) {
         require(collectionExists[_collectionId], "Collection does not exist");
         require(msg.value >= feePerGuess, "Insufficient fee");
@@ -162,66 +154,60 @@ contract Quizzdle {
         uint256 currentDay = block.timestamp / 86400;
         UserSession storage session = userSessions[msg.sender][_collectionId][currentDay];
 
-        // Vérifier que le joueur n'a pas déjà gagné
+        // Verrou anti-double-victoire
         require(!session.hasWonToday, "Already won today");
 
-        // Si le commitment n'est pas encore défini, le définir après vérification de la signature
-        if (session.commitment == bytes32(0)) {
-            // Vérifier la signature du serveur (inclut maintenant shouldFlag)
-            bytes32 messageHash = keccak256(abi.encodePacked(
-                msg.sender,
-                _collectionId,
-                currentDay,
-                _commitment,
-                _shouldFlag
-            ));
-            bytes32 ethSignedHash = keccak256(abi.encodePacked(
-                "\x19Ethereum Signed Message:\n32",
-                messageHash
-            ));
+        // Vérifier la signature serveur sur CHAQUE appel (le serveur atteste la correctness)
+        // Inclut address(this) pour bloquer le replay cross-déploiement
+        bytes32 messageHash = keccak256(abi.encodePacked(
+            address(this),
+            msg.sender,
+            _collectionId,
+            currentDay,
+            _saltedGuess,
+            _isCorrect,
+            _shouldFlag
+        ));
+        bytes32 ethSignedHash = keccak256(abi.encodePacked(
+            "\x19Ethereum Signed Message:\n32",
+            messageHash
+        ));
+        address signer = _recoverSigner(ethSignedHash, _serverSignature);
+        require(signer == server, "Invalid server signature");
 
-            address signer = _recoverSigner(ethSignedHash, _serverSignature);
-            require(signer == server, "Invalid server signature");
+        isCorrect = _isCorrect;
 
-            // Définir le commitment
-            session.commitment = _commitment;
-            emit CommitmentSet(msg.sender, _collectionId, currentDay, _commitment);
-
-            // Auto-flag si multi-wallet détecté (le user paie pour son propre flag!)
-            if (_shouldFlag && !flaggedWallets[msg.sender]) {
-                flaggedWallets[msg.sender] = true;
-                flagReason[msg.sender] = "Multi-wallet detected";
-                totalFlaggedWallets++;
-                emit WalletFlagged(msg.sender, "Multi-wallet detected");
-            }
-        } else {
-            // Le commitment existe déjà, vérifier qu'il correspond
-            require(session.commitment == _commitment, "Commitment mismatch");
+        // Auto-flag (signé par le serveur, l'utilisateur ne peut pas l'inverser)
+        if (_shouldFlag && !flaggedWallets[msg.sender]) {
+            flaggedWallets[msg.sender] = true;
+            flagReason[msg.sender] = "Multi-wallet detected";
+            totalFlaggedWallets++;
+            emit WalletFlagged(msg.sender, "Multi-wallet detected");
         }
 
-        // Track payment
+        // Comptabilité du paiement
         totalPaid[msg.sender] += msg.value;
         globalTotalPaid += msg.value;
         dailyRevenue[currentDay] += msg.value;
 
-        // Referral rewards (10%)
+        // Référal (10%) — try/catch pour qu'un mauvais contrat de réf ne bloque pas le jeu
         if (address(referralContract) != address(0)) {
-            address referrer = referralContract.referredBy(msg.sender);
-            if (referrer != address(0)) {
-                uint256 referralAmount = msg.value / 10;
-                referralRewards[referrer] += referralAmount;
-                totalReferralEarned[referrer] += referralAmount;
-                totalReferralRewards += referralAmount;
+            try referralContract.referredBy(msg.sender) returns (address referrer) {
+                if (referrer != address(0) && referrer != msg.sender) {
+                    uint256 referralAmount = msg.value / 10;
+                    referralRewards[referrer] += referralAmount;
+                    totalReferralEarned[referrer] += referralAmount;
+                    totalReferralRewards += referralAmount;
+                }
+            } catch {
+                // Référal cassé : on ignore pour ne pas bloquer le gameplay
             }
         }
 
-        // Finalize previous day if needed
+        // Auto-finalisation du jour précédent si possible
         if (currentDay > 0 && !dayFinalized[currentDay - 1] && dailyRevenue[currentDay - 1] > 0) {
             _finalizeDay(currentDay - 1);
         }
-
-        // Comparer le guess avec le commitment
-        isCorrect = (_saltedGuess == _commitment);
 
         // Enregistrer le guess
         playerDailyGuesses[msg.sender][_collectionId][currentDay].push(SaltedGuess({
@@ -245,7 +231,7 @@ contract Quizzdle {
             emit WinRecorded(msg.sender, _collectionId, currentDay);
         }
 
-        // Event avec hash salé uniquement (pas de characterId!)
+        // Event sans characterId — juste le hash opaque
         emit SaltedGuessMade(msg.sender, _collectionId, _saltedGuess, isCorrect, attempts);
 
         return (isCorrect, attempts);
@@ -273,7 +259,15 @@ contract Quizzdle {
 
         require(v == 27 || v == 28, "Invalid signature v value");
 
-        return ecrecover(_ethSignedHash, v, r, s);
+        // EIP-2: rejeter les signatures non canoniques (s dans la moitié haute)
+        require(
+            uint256(s) <= 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0,
+            "Invalid signature s value"
+        );
+
+        address recovered = ecrecover(_ethSignedHash, v, r, s);
+        require(recovered != address(0), "Invalid signature");
+        return recovered;
     }
 
     // ============ View Functions ============
@@ -287,14 +281,12 @@ contract Quizzdle {
         uint256 _collectionId,
         uint256 _day
     ) external view returns (
-        bytes32 commitment,
         bool hasWonToday,
         uint256 attemptsToday
     ) {
         UserSession storage session = userSessions[_player][_collectionId][_day];
         uint256 attempts = playerDailyGuesses[_player][_collectionId][_day].length;
         return (
-            session.commitment,
             session.hasWonToday,
             attempts
         );
@@ -324,15 +316,18 @@ contract Quizzdle {
         return userSessions[_player][_collectionId][currentDay].hasWonToday;
     }
 
-    function getCommitment(
-        address _player,
-        uint256 _collectionId
-    ) external view returns (bytes32) {
-        uint256 currentDay = block.timestamp / 86400;
-        return userSessions[_player][_collectionId][currentDay].commitment;
-    }
-
     // ============ Rewards Functions ============
+
+    /**
+     * @dev Finalisation publique d'un jour passé : permet de débloquer les rewards
+     * d'un jour qui n'aurait pas été auto-finalisé (par exemple si plus personne ne joue
+     * le lendemain). Idempotent et limité aux jours strictement passés.
+     */
+    function finalizeDay(uint256 _day) external {
+        require(_day < block.timestamp / 86400, "Day not finished");
+        require(!dayFinalized[_day], "Already finalized");
+        _finalizeDay(_day);
+    }
 
     function _finalizeDay(uint256 _day) internal {
         if (dayFinalized[_day]) return;
@@ -380,6 +375,7 @@ contract Quizzdle {
         require(!flaggedWallets[msg.sender], "Wallet flagged for abuse");
 
         uint256 currentDay = block.timestamp / 86400;
+        require(currentDay > 0, "No previous days");
         uint256 totalReward = 0;
         uint256 daysChecked = 0;
 
@@ -424,6 +420,7 @@ contract Quizzdle {
         uint256 unclaimedDaysCount
     ) {
         uint256 currentDay = block.timestamp / 86400;
+        if (currentDay == 0) return (0, 0);
         uint256 daysChecked = 0;
 
         for (uint256 day = currentDay - 1; daysChecked < _maxDaysToCheck && day > 0; day--) {

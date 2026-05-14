@@ -10,7 +10,8 @@ import { useReferalStats, useSetReferralCode, useReferralRewards, useClaimReferr
 import { usePlayerWinsYesterdayAndToday, useTotalPendingRewards, useClaimAllWinnerRewards } from "@/hooks/useWinnerRewards";
 import { useIsOwner, useOwnerWithdrawableAmount, useOwnerWithdraw, useEmergencyWithdraw } from "@/hooks/useOwnerWithdraw";
 import { useDailyPool, useAddDailyBonus } from "@/hooks/useDailyPool";
-import { formatEther } from "viem";
+import { useFeePerGuess, useSetFee } from "@/hooks/useGameFee";
+import { formatEther, formatGwei, parseEther } from "viem";
 import { WalletButton } from "./WalletButton";
 import { StatsHeader } from "./StatsHeader";
 import { Footer } from "./Footer";
@@ -191,6 +192,32 @@ export function ProfileView() {
   } = useAddDailyBonus();
   const [bonusAmount, setBonusAmount] = useState("");
 
+  // Game Fee (Owner)
+  const { fee: currentFeeWei, refetch: refetchFee } = useFeePerGuess();
+  const {
+    setFee: setGameFee,
+    isPending: isFeePending,
+    isConfirming: isFeeConfirming,
+    isConfirmed: isFeeConfirmed,
+    error: feeError,
+  } = useSetFee();
+  const [newFeeEth, setNewFeeEth] = useState("");
+  // Pre-parse the input so we can show a live wei preview and gate the
+  // submit button on a parseable value (parseEther throws on garbage).
+  let parsedNewFeeWei: bigint | null = null;
+  let parseError = false;
+  if (newFeeEth.trim().length > 0) {
+    try {
+      parsedNewFeeWei = parseEther(newFeeEth as `${number}`);
+    } catch {
+      parseError = true;
+    }
+  }
+  const handleSetFee = () => {
+    if (parsedNewFeeWei === null) return;
+    setGameFee(parsedNewFeeWei).catch((e) => console.error("setFee failed:", e));
+  };
+
   // Get contract balance
   const { data: contractBalanceData, refetch: refetchContractBalance } = useBalance({
     address: CONTRACT_ADDRESS as `0x${string}`,
@@ -276,6 +303,17 @@ export function ProfileView() {
       return () => clearTimeout(timeout);
     }
   }, [isBonusConfirmed, refetchPools, refetchReserves, refetchContractBalance]);
+
+  // Refetch fee after setFee tx confirms
+  useEffect(() => {
+    if (isFeeConfirmed) {
+      const timeout = setTimeout(() => {
+        refetchFee();
+        setNewFeeEth("");
+      }, 2000);
+      return () => clearTimeout(timeout);
+    }
+  }, [isFeeConfirmed, refetchFee]);
 
   const totalWins = userTotalWins ? Number(userTotalWins) : 0;
 
@@ -634,6 +672,96 @@ export function ProfileView() {
               {isEmergencyConfirmed && (
                 <p className="text-red-400 text-xs sm:text-sm text-center mt-2">
                   Emergency withdrawal complete!
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Guess Fee (Owner Only) */}
+          {isOwner && (
+            <div className="mb-4 sm:mb-6 bg-gradient-to-r from-[#121217] via-[#1a1a2e] to-[#121217] border border-violet-500/40 rounded-2xl p-4 sm:p-6">
+              <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+                <div className="p-1.5 sm:p-2 rounded-lg bg-violet-500/20 text-violet-400 scale-75 sm:scale-100">
+                  <CoinsIcon />
+                </div>
+                <div>
+                  <h2 className="text-sm sm:text-lg font-bold text-white">Guess Fee</h2>
+                  <p className="text-white/50 text-xs sm:text-sm">
+                    Raise to make on-chain brute-force uneconomic
+                  </p>
+                </div>
+              </div>
+
+              {/* Current fee display */}
+              <div className="grid grid-cols-2 gap-2 sm:gap-4 mb-3 sm:mb-4">
+                <div className="bg-white/5 rounded-lg sm:rounded-xl p-2 sm:p-4 text-center">
+                  <p className="text-[10px] sm:text-sm text-white/50 mb-0.5 sm:mb-1">
+                    Current fee
+                  </p>
+                  <p className="text-base sm:text-2xl font-bold text-violet-400">
+                    {formatGwei(currentFeeWei)}
+                  </p>
+                  <p className="text-[10px] sm:text-xs text-white/40 mt-0.5 sm:mt-1">gwei</p>
+                </div>
+                <div className="bg-white/5 rounded-lg sm:rounded-xl p-2 sm:p-4 text-center">
+                  <p className="text-[10px] sm:text-sm text-white/50 mb-0.5 sm:mb-1">In ETH</p>
+                  <p className="text-base sm:text-2xl font-bold text-blue-400 break-all">
+                    {formatEther(currentFeeWei)}
+                  </p>
+                  <p className="text-[10px] sm:text-xs text-white/40 mt-0.5 sm:mt-1">ETH</p>
+                </div>
+              </div>
+
+              {/* Set new fee */}
+              <div className="bg-white/5 rounded-lg sm:rounded-xl p-3 sm:p-4">
+                <p className="text-white/70 text-xs sm:text-sm mb-2">
+                  New fee per guess. At ~0.0001 ETH a 50-char brute-force costs
+                  ~0.005 ETH — proportional to a realistic prize pool.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0.0001"
+                    value={newFeeEth}
+                    onChange={(e) => setNewFeeEth(e.target.value)}
+                    className="flex-1 px-3 sm:px-4 py-2 bg-black/30 border border-white/10 rounded-lg sm:rounded-xl text-white text-sm placeholder-white/40 focus:outline-none focus:border-violet-500/50"
+                  />
+                  <span className="flex items-center text-white/50 text-sm">ETH</span>
+                  <button
+                    onClick={handleSetFee}
+                    disabled={
+                      isFeePending ||
+                      isFeeConfirming ||
+                      parsedNewFeeWei === null ||
+                      parsedNewFeeWei === currentFeeWei
+                    }
+                    className="px-4 py-2 bg-gradient-to-r from-violet-500 to-blue-500 text-white rounded-lg sm:rounded-xl font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
+                  >
+                    {isFeePending || isFeeConfirming ? "..." : "Set fee"}
+                  </button>
+                </div>
+                {parsedNewFeeWei !== null && (
+                  <p className="text-white/40 text-[10px] sm:text-xs mt-2">
+                    = {formatGwei(parsedNewFeeWei)} gwei ({parsedNewFeeWei.toString()} wei)
+                  </p>
+                )}
+                {parseError && (
+                  <p className="text-red-400 text-[10px] sm:text-xs mt-2">
+                    Invalid amount.
+                  </p>
+                )}
+              </div>
+
+              {isFeeConfirmed && (
+                <p className="text-violet-400 text-xs sm:text-sm text-center mt-2">
+                  Fee updated ✓
+                </p>
+              )}
+
+              {feeError && (
+                <p className="text-red-400 text-xs sm:text-sm text-center mt-2 break-all">
+                  Error: {feeError.message}
                 </p>
               )}
             </div>
