@@ -11,6 +11,8 @@ export async function generateMetadata(): Promise<Metadata> {
     description: minikitConfig.miniapp.description,
     other: {
       'base:app_id': '6970863785045b1333e7babb',
+      'talentapp:project_verification':
+        '7fd47d705f3e0da75c669216c8d96edb1af739aaf0afab7ca2708c8ba623724a57e11b484ca421cfd4e9bb94e5100c142dfdec2b1654a1970d90618b92b26e82',
       "fc:frame": JSON.stringify({
         version: minikitConfig.miniapp.version,
         imageUrl: minikitConfig.miniapp.heroImageUrl,
