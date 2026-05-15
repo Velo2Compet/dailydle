@@ -6,18 +6,23 @@ import {
   parseEventLogs,
   isAddress,
   isHash,
+  keccak256,
+  encodePacked,
+  getAddress,
 } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import { APP_CHAIN, RPC_URL } from "@/lib/chain-config";
 import {
   getPendingReveal,
   markRevealedFirstTime,
-  decrementInflight,
 } from "@/lib/pending-reveals";
 
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}`;
+const SERVER_PRIVATE_KEY = process.env.SERVER_PRIVATE_KEY as `0x${string}`;
 
+// Event signature in the v2 contract: no isCorrect bit (commit doesn't know it).
 const saltedGuessMadeAbi = parseAbi([
-  "event SaltedGuessMade(address indexed player, uint256 indexed collectionId, bytes32 saltedHash, bool isCorrect, uint256 attempts)",
+  "event SaltedGuessMade(address indexed player, uint256 indexed collectionId, bytes32 saltedHash, uint256 attempts)",
 ]);
 
 const publicClient = createPublicClient({
@@ -26,20 +31,60 @@ const publicClient = createPublicClient({
 });
 
 /**
+ * Sign the WIN attestation. Distinct preimage from the commit signature
+ * (domain separator "WIN") so the two cannot be cross-used. The contract
+ * additionally requires a matching on-chain commit, so even a compromised
+ * server cannot make an un-paid wallet win.
+ *
+ * MUST mirror the on-chain hash exactly:
+ *   keccak256("WIN", address(this), player, collectionId, day, saltedGuess)
+ */
+async function signWinAttestation(
+  contractAddress: string,
+  playerAddress: string,
+  collectionId: number,
+  day: number,
+  saltedGuess: string
+): Promise<string> {
+  const account = privateKeyToAccount(SERVER_PRIVATE_KEY);
+
+  const messageHash = keccak256(
+    encodePacked(
+      ["string", "address", "address", "uint256", "uint256", "bytes32"],
+      [
+        "WIN",
+        contractAddress as `0x${string}`,
+        playerAddress as `0x${string}`,
+        BigInt(collectionId),
+        BigInt(day),
+        saltedGuess as `0x${string}`,
+      ]
+    )
+  );
+
+  return account.signMessage({ message: { raw: messageHash } });
+}
+
+/**
  * POST /api/reveal
  *
- * Phase 2 of the 2-phase guess flow. Releases the per-attribute
- * `comparisons` (and the daily character if the player won) only after
- * verifying via RPC that:
- *   1. the tx is mined and succeeded,
- *   2. it came from the claimed player,
- *   3. it targets our contract,
- *   4. it emitted SaltedGuessMade with the matching saltedHash.
+ * Phase 2 of the commit/claim flow. After the player has submitted the
+ * COMMIT transaction on-chain (paying the fee), this endpoint validates
+ * the receipt and releases:
+ *   - isCorrect (the correctness bit, withheld from /api/guess on purpose)
+ *   - comparisons (per-attribute hints)
+ *   - dailyCharacter (only if the player won)
+ *   - winSignature (only if the player won — used to call claimWin on-chain)
  *
- * Why this exists: see /api/guess. The sensitive comparison data is
- * stashed there in `pending-reveals` keyed by the opaque saltedGuess.
- * This endpoint is the only way to retrieve it — proof of payment is
- * required, which neutralises the free-brute-force attack.
+ * Validations on the tx receipt:
+ *   1. mined and succeeded,
+ *   2. tx sender matches the claimed player,
+ *   3. tx targets our contract,
+ *   4. SaltedGuessMade event present with the matching saltedHash and player.
+ *
+ * Because none of these checks can succeed without a paid commit on-chain,
+ * the correctness bit can never be learned for free — every probe costs the
+ * fee. This is what makes brute-forcing the daily answer uneconomic.
  *
  * Body:
  * - saltedGuess: `0x${string}`
@@ -48,7 +93,7 @@ const publicClient = createPublicClient({
  */
 export async function POST(request: NextRequest) {
   try {
-    if (!CONTRACT_ADDRESS) {
+    if (!CONTRACT_ADDRESS || !SERVER_PRIVATE_KEY) {
       return NextResponse.json(
         { error: "Server configuration error" },
         { status: 500 }
@@ -148,13 +193,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Decrement inflight only on the first successful reveal so retries
-    // (e.g. client refresh) don't artificially raise the cap. The
-    // markRevealedFirstTime() call uses Redis SET NX so it's atomic
-    // across concurrent reveal calls.
-    const isFirstReveal = await markRevealedFirstTime(saltedGuess);
-    if (isFirstReveal) {
-      await decrementInflight(pending.rateLimitKey);
+    // markRevealedFirstTime is kept for idempotency; today it doesn't
+    // gate any one-shot side-effect (claimWin is player-triggered via
+    // the UI), but it's a useful hook for any future fire-once server
+    // behaviour we want to add to this endpoint.
+    await markRevealedFirstTime(saltedGuess);
+
+    // Sign the WIN attestation only when the player actually won. The
+    // contract additionally checks that a matching commit exists on-chain
+    // before crediting the win, so this signature alone is not enough —
+    // it has to be paired with the paid commit from the same wallet.
+    //
+    // The signature is RE-SIGNABLE: each reveal call regenerates it
+    // deterministically (same preimage → same signature output up to
+    // randomness in the signing scheme; either way the resulting sig is
+    // valid). That lets the client recover after a page refresh by
+    // re-POSTing /api/reveal with the same saltedGuess + txHash.
+    let winSignature: `0x${string}` | undefined;
+    if (pending.isCorrect) {
+      winSignature = (await signWinAttestation(
+        getAddress(CONTRACT_ADDRESS),
+        getAddress(playerAddress),
+        pending.collectionId,
+        pending.day,
+        saltedGuess
+      )) as `0x${string}`;
     }
 
     return NextResponse.json({
@@ -163,6 +226,11 @@ export async function POST(request: NextRequest) {
       guessedCharacter: pending.guessedCharacter,
       // Only reveal the daily character if the player actually won.
       dailyCharacter: pending.isCorrect ? pending.dailyCharacter : undefined,
+      // Win attestation: the client uses this with claimWin() to record
+      // the win on-chain. Only present when isCorrect=true.
+      winSignature,
+      day: pending.day,
+      collectionId: pending.collectionId,
     });
   } catch (error) {
     console.error("Reveal error:", error);

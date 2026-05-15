@@ -45,6 +45,7 @@ export interface QuizzdleInterface extends Interface {
       | "addDailyBonus"
       | "claimAllWinnerRewards"
       | "claimReferralRewards"
+      | "claimWin"
       | "claimWinnerRewards"
       | "claimedDays"
       | "collectionExists"
@@ -106,6 +107,7 @@ export interface QuizzdleInterface extends Interface {
       | "SaltedGuessMade"
       | "WalletFlagged"
       | "WalletUnflagged"
+      | "WinClaimed"
       | "WinRecorded"
   ): EventFragment;
 
@@ -128,6 +130,10 @@ export interface QuizzdleInterface extends Interface {
   encodeFunctionData(
     functionFragment: "claimReferralRewards",
     values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "claimWin",
+    values: [AddressLike, BigNumberish, BigNumberish, BytesLike, BytesLike]
   ): string;
   encodeFunctionData(
     functionFragment: "claimWinnerRewards",
@@ -277,7 +283,7 @@ export interface QuizzdleInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "submitSaltedGuess",
-    values: [BigNumberish, BytesLike, boolean, boolean, BytesLike]
+    values: [BigNumberish, BytesLike, boolean, BytesLike]
   ): string;
   encodeFunctionData(
     functionFragment: "totalFlaggedWallets",
@@ -356,6 +362,7 @@ export interface QuizzdleInterface extends Interface {
     functionFragment: "claimReferralRewards",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "claimWin", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "claimWinnerRewards",
     data: BytesLike
@@ -560,21 +567,18 @@ export namespace SaltedGuessMadeEvent {
     player: AddressLike,
     collectionId: BigNumberish,
     saltedHash: BytesLike,
-    isCorrect: boolean,
     attempts: BigNumberish
   ];
   export type OutputTuple = [
     player: string,
     collectionId: bigint,
     saltedHash: string,
-    isCorrect: boolean,
     attempts: bigint
   ];
   export interface OutputObject {
     player: string;
     collectionId: bigint;
     saltedHash: string;
-    isCorrect: boolean;
     attempts: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
@@ -601,6 +605,31 @@ export namespace WalletUnflaggedEvent {
   export type OutputTuple = [wallet: string];
   export interface OutputObject {
     wallet: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace WinClaimedEvent {
+  export type InputTuple = [
+    player: AddressLike,
+    collectionId: BigNumberish,
+    day: BigNumberish,
+    saltedHash: BytesLike
+  ];
+  export type OutputTuple = [
+    player: string,
+    collectionId: bigint,
+    day: bigint,
+    saltedHash: string
+  ];
+  export interface OutputObject {
+    player: string;
+    collectionId: bigint;
+    day: bigint;
+    saltedHash: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -686,6 +715,18 @@ export interface Quizzdle extends BaseContract {
   >;
 
   claimReferralRewards: TypedContractMethod<[], [void], "nonpayable">;
+
+  claimWin: TypedContractMethod<
+    [
+      _winner: AddressLike,
+      _collectionId: BigNumberish,
+      _day: BigNumberish,
+      _saltedGuess: BytesLike,
+      _winSignature: BytesLike
+    ],
+    [void],
+    "nonpayable"
+  >;
 
   claimWinnerRewards: TypedContractMethod<
     [_day: BigNumberish],
@@ -882,11 +923,10 @@ export interface Quizzdle extends BaseContract {
     [
       _collectionId: BigNumberish,
       _saltedGuess: BytesLike,
-      _isCorrect: boolean,
       _shouldFlag: boolean,
-      _serverSignature: BytesLike
+      _commitSignature: BytesLike
     ],
-    [[boolean, bigint] & { isCorrect: boolean; attempts: bigint }],
+    [bigint],
     "payable"
   >;
 
@@ -957,6 +997,19 @@ export interface Quizzdle extends BaseContract {
   getFunction(
     nameOrSignature: "claimReferralRewards"
   ): TypedContractMethod<[], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "claimWin"
+  ): TypedContractMethod<
+    [
+      _winner: AddressLike,
+      _collectionId: BigNumberish,
+      _day: BigNumberish,
+      _saltedGuess: BytesLike,
+      _winSignature: BytesLike
+    ],
+    [void],
+    "nonpayable"
+  >;
   getFunction(
     nameOrSignature: "claimWinnerRewards"
   ): TypedContractMethod<[_day: BigNumberish], [void], "nonpayable">;
@@ -1164,11 +1217,10 @@ export interface Quizzdle extends BaseContract {
     [
       _collectionId: BigNumberish,
       _saltedGuess: BytesLike,
-      _isCorrect: boolean,
       _shouldFlag: boolean,
-      _serverSignature: BytesLike
+      _commitSignature: BytesLike
     ],
-    [[boolean, bigint] & { isCorrect: boolean; attempts: bigint }],
+    [bigint],
     "payable"
   >;
   getFunction(
@@ -1255,6 +1307,13 @@ export interface Quizzdle extends BaseContract {
     WalletUnflaggedEvent.OutputObject
   >;
   getEvent(
+    key: "WinClaimed"
+  ): TypedContractEvent<
+    WinClaimedEvent.InputTuple,
+    WinClaimedEvent.OutputTuple,
+    WinClaimedEvent.OutputObject
+  >;
+  getEvent(
     key: "WinRecorded"
   ): TypedContractEvent<
     WinRecordedEvent.InputTuple,
@@ -1274,7 +1333,7 @@ export interface Quizzdle extends BaseContract {
       DailyBonusAddedEvent.OutputObject
     >;
 
-    "SaltedGuessMade(address,uint256,bytes32,bool,uint256)": TypedContractEvent<
+    "SaltedGuessMade(address,uint256,bytes32,uint256)": TypedContractEvent<
       SaltedGuessMadeEvent.InputTuple,
       SaltedGuessMadeEvent.OutputTuple,
       SaltedGuessMadeEvent.OutputObject
@@ -1305,6 +1364,17 @@ export interface Quizzdle extends BaseContract {
       WalletUnflaggedEvent.InputTuple,
       WalletUnflaggedEvent.OutputTuple,
       WalletUnflaggedEvent.OutputObject
+    >;
+
+    "WinClaimed(address,uint256,uint256,bytes32)": TypedContractEvent<
+      WinClaimedEvent.InputTuple,
+      WinClaimedEvent.OutputTuple,
+      WinClaimedEvent.OutputObject
+    >;
+    WinClaimed: TypedContractEvent<
+      WinClaimedEvent.InputTuple,
+      WinClaimedEvent.OutputTuple,
+      WinClaimedEvent.OutputObject
     >;
 
     "WinRecorded(address,uint256,uint256)": TypedContractEvent<

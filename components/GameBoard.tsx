@@ -183,20 +183,29 @@ export function GameBoard({ collection }: GameBoardProps) {
     currentDay,
     hasSessionSignature,
     isSigningSession,
+    pendingClaim,
+    isClaimPending,
     submitGuess,
     signSession,
+    claimWin,
     clearError,
     refresh,
   } = useSecureGame(collection);
 
-  // Compute game state from secure hook
+  // Game-over from a UI perspective covers BOTH "already claimed
+  // on-chain" (hasWonToday) AND "won but hasn't claimed yet"
+  // (pendingClaim != null). Either way, no more guesses should be
+  // accepted for this collection today.
+  const hasUnclaimedWin = pendingClaim != null;
+  const isWonForUi = hasWonToday || hasUnclaimedWin;
+
   const gameState = {
     collectionId: collection.id,
     dailyCharacter,
     attempts: attemptsToday,
     guesses,
-    isGameOver: hasWonToday,
-    isGameWon: hasWonToday,
+    isGameOver: isWonForUi,
+    isGameWon: isWonForUi,
   };
 
   // Read collection stats from contract
@@ -539,17 +548,22 @@ export function GameBoard({ collection }: GameBoardProps) {
                 rel="noopener noreferrer"
                 className="text-violet-400 underline hover:no-underline transition-all"
               >
-                quizzdle.fr
+                quizzdle.com
               </a>{" "}
               powered game
             </span>
           </div>
 
-        {/* Message de victoire */}
+        {/* Victory card — visible whether or not the win is claimed on-chain.
+            When unclaimed, the embedded button triggers claimWin (2nd tx). */}
         {gameState.isGameWon && (
           <VictoryAnimation
             characterName={gameState.guesses.find(g => g.isCorrect)?.characterName || "the character"}
             attempts={gameState.attempts}
+            needsClaim={hasUnclaimedWin}
+            isClaimPending={isClaimPending}
+            claimError={gameError}
+            onClaim={() => { void claimWin(); }}
           />
         )}
 

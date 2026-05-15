@@ -48,7 +48,7 @@ export function CategoriesView({ categories }: CategoriesViewProps) {
           </div>
         {filteredCategories.length === 0 ? (
           <div className={styles.emptyState}>
-            <p>Aucune collection disponible.</p>
+            <p>No collections available.</p>
           </div>
         ) : (
           <div className={styles.categoryGrid}>

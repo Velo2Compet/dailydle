@@ -49,9 +49,9 @@ export default async function GameCategoryPage({ params }: PageProps) {
       return (
         <div className={styles.container}>
           <div className={styles.error}>
-            <p>Clé API Quizzdle manquante ou invalide.</p>
-            <p>Ajoutez <code>QUIZZDLE_API_KEY</code> dans <code>.env.local</code> puis redémarrez.</p>
-            <Link href="/">← Retour à l&apos;accueil</Link>
+            <p>Missing or invalid Quizzdle API key.</p>
+            <p>Add <code>QUIZZDLE_API_KEY</code> to <code>.env.local</code>, then restart.</p>
+            <Link href="/">← Back to home</Link>
           </div>
         </div>
       );

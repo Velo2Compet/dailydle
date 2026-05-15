@@ -1,9 +1,17 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { Loader2 } from "lucide-react";
 
 interface VictoryAnimationProps {
   characterName: string;
   attempts: number;
+  // When true, the win still needs to be finalised on-chain via claimWin.
+  // When false, the win is already recorded (hasWonToday == true).
+  needsClaim: boolean;
+  isClaimPending: boolean;
+  claimError?: string | null;
+  onClaim: () => void;
 }
 
 interface ConfettiPiece {
@@ -18,7 +26,14 @@ interface ConfettiPiece {
 
 const CONFETTI_COLORS = ['#60a5fa', '#a855f7', '#22d3ee', '#34d399', '#f59e0b'];
 
-export function VictoryAnimation({ characterName, attempts }: VictoryAnimationProps) {
+export function VictoryAnimation({
+  characterName,
+  attempts,
+  needsClaim,
+  isClaimPending,
+  claimError,
+  onClaim,
+}: VictoryAnimationProps) {
   const [confetti, setConfetti] = useState<ConfettiPiece[]>([]);
 
   useEffect(() => {
@@ -65,6 +80,50 @@ export function VictoryAnimation({ characterName, attempts }: VictoryAnimationPr
         <p className="text-muted-foreground">
           You found <span className="text-violet-400 font-semibold">{characterName}</span> in {attempts} attempt(s)!
         </p>
+
+        {needsClaim ? (
+          <div className="mt-4 p-3 sm:p-4 bg-amber-500/10 border border-amber-500/40 rounded-xl text-sm sm:text-base">
+            <p className="text-white/90">
+              One more step: <span className="font-semibold text-amber-300">claim your win on-chain</span> to make it official.
+            </p>
+            <p className="text-white/60 text-xs sm:text-sm mt-1">
+              Claim before the daily pool finalizes — otherwise the win won&apos;t count.
+            </p>
+            <button
+              type="button"
+              onClick={onClaim}
+              disabled={isClaimPending}
+              className="mt-3 inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {isClaimPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Claiming…
+                </>
+              ) : (
+                <>Claim win on-chain →</>
+              )}
+            </button>
+            {claimError && (
+              <p className="text-red-400 text-xs sm:text-sm mt-2 break-all">
+                {claimError}
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="mt-4 p-3 sm:p-4 bg-violet-500/10 border border-violet-500/30 rounded-xl text-sm sm:text-base">
+            <p className="text-white/90">
+              Your win is recorded on-chain ✓ Rewards become claimable{" "}
+              <span className="font-semibold text-violet-300">tomorrow</span>, once the daily pool is finalized.
+            </p>
+            <Link
+              href="/profile"
+              className="mt-3 inline-block px-4 py-2 rounded-lg bg-gradient-to-r from-violet-500 to-blue-500 text-white text-sm font-medium hover:opacity-90 transition-opacity"
+            >
+              Go to claim page →
+            </Link>
+          </div>
+        )}
       </div>
     </div>
   );

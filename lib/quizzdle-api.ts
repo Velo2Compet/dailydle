@@ -1,7 +1,16 @@
 /**
  * Client API Quizzdle – appels serveur uniquement (utilise QUIZZDLE_API_KEY).
- * Base: https://quizzdle.fr/api/public
- * Routes: parent-categories, categories/{id}
+ * Base: https://quizzdle.com/api/public
+ * Routes: categories, parent-categories, categories/{id}
+ *
+ * Language: we pass ?lang=en everywhere. The backend supports a `lang` query
+ * param (default "fr") and falls back to the main language (fr) row-by-row
+ * when an English translation row is missing — so requesting `en` is safe
+ * regardless of how much of the EN catalogue is actually translated.
+ *
+ * Pagination: the listing endpoints cap at limit=50 server-side. We request
+ * the max and iterate `total_pages` when there is more, so callers never
+ * have to think about paging.
  */
 
 const NEXT_PUBLIC_QUIZZDLE_API_URL =
@@ -9,6 +18,16 @@ const NEXT_PUBLIC_QUIZZDLE_API_URL =
 const BASE = `${NEXT_PUBLIC_QUIZZDLE_API_URL}/api/public`;
 // Nettoyer la clé API de tout caractère invisible/non-ASCII
 const API_KEY = (process.env.QUIZZDLE_API_KEY ?? "").trim().replace(/[^\x20-\x7E]/g, "");
+
+const DEFAULT_LANG = "en";
+const PAGE_LIMIT = 50; // server cap; values higher are clamped
+
+interface ApiPagination {
+  page: number;
+  limit: number;
+  total: number;
+  total_pages: number;
+}
 
 function headers(): HeadersInit {
   const h: Record<string, string> = {
@@ -72,22 +91,57 @@ export interface QuizzdleCategoryFull {
 }
 
 /**
- * GET /api/public/categories
- * Liste plate de toutes les catégories.
+ * Fetch a single paginated page. Returns the items and the pagination block
+ * so a caller can decide whether to keep iterating.
+ */
+async function fetchPage<T>(
+  url: string
+): Promise<{ items: T[]; pagination: ApiPagination | null }> {
+  const res = await fetch(url, { headers: headers() });
+  if (!res.ok) {
+    throw Object.assign(new Error(`Quizzdle API ${url}: ${res.status}`), {
+      status: res.status,
+    });
+  }
+  const data = await res.json();
+  const items: T[] = Array.isArray(data)
+    ? data
+    : (data?.data ?? data?.categories ?? []);
+  const pagination = data && typeof data === "object" ? (data.pagination as ApiPagination | undefined) ?? null : null;
+  return { items: Array.isArray(items) ? items : [], pagination };
+}
+
+/**
+ * Drain every page of a paginated listing endpoint. Pages 2..N are fetched
+ * in parallel — server cap is 50/page and current catalogue is ~40 items,
+ * so realistically this is one round trip; we just don't want to silently
+ * truncate when the catalogue grows past 50.
+ */
+async function fetchAllPages<T>(buildUrl: (page: number) => string): Promise<T[]> {
+  const first = await fetchPage<T>(buildUrl(1));
+  const totalPages = first.pagination?.total_pages ?? 1;
+  if (totalPages <= 1) return first.items;
+
+  const restUrls: string[] = [];
+  for (let p = 2; p <= totalPages; p++) restUrls.push(buildUrl(p));
+
+  const rest = await Promise.all(restUrls.map((u) => fetchPage<T>(u)));
+  return first.items.concat(...rest.map((r) => r.items));
+}
+
+/**
+ * GET /api/public/categories?lang=en&limit=50&page=…
+ * Liste plate de toutes les catégories, toutes pages confondues, en anglais
+ * (fallback FR par row si traduction manquante côté backend).
  * En cas d'erreur ou d'API indisponible, retourne [].
  */
-export async function fetchCategories(): Promise<QuizzdleCategoryRef[]> {
+export async function fetchCategories(
+  lang: string = DEFAULT_LANG
+): Promise<QuizzdleCategoryRef[]> {
   try {
-    const res = await fetch(`${BASE}/categories`, { headers: headers() });
-    if (!res.ok) {
-      if (process.env.NODE_ENV === "development") {
-        console.warn(`Quizzdle API categories: ${res.status}`);
-      }
-      return [];
-    }
-    const data = await res.json();
-    const raw = Array.isArray(data) ? data : data?.data ?? data?.categories ?? [];
-    return Array.isArray(raw) ? raw : [];
+    return await fetchAllPages<QuizzdleCategoryRef>(
+      (page) => `${BASE}/categories?lang=${lang}&limit=${PAGE_LIMIT}&page=${page}`
+    );
   } catch (e) {
     if (process.env.NODE_ENV === "development") {
       console.warn("Quizzdle API categories:", e);
@@ -97,21 +151,17 @@ export async function fetchCategories(): Promise<QuizzdleCategoryRef[]> {
 }
 
 /**
- * GET /api/public/parent-categories
+ * GET /api/public/parent-categories?lang=en&limit=50&page=…
  * Liste des catégories parentes avec leurs catégories enfants.
  * En cas d'erreur (404, 500, etc.) ou d'API indisponible, retourne [].
  */
-export async function fetchCategoriesParent(): Promise<QuizzdleParentCategory[]> {
+export async function fetchCategoriesParent(
+  lang: string = DEFAULT_LANG
+): Promise<QuizzdleParentCategory[]> {
   try {
-    const res = await fetch(`${BASE}/parent-categories`, { headers: headers() });
-    if (!res.ok) {
-      if (process.env.NODE_ENV === "development") {
-        console.warn(`Quizzdle API parent-categories: ${res.status}`);
-      }
-      return [];
-    }
-    const data = await res.json();
-    return Array.isArray(data) ? data : data.data ?? data.categories ?? [];
+    return await fetchAllPages<QuizzdleParentCategory>(
+      (page) => `${BASE}/parent-categories?lang=${lang}&limit=${PAGE_LIMIT}&page=${page}`
+    );
   } catch (e) {
     if (process.env.NODE_ENV === "development") {
       console.warn("Quizzdle API parent-categories:", e);
@@ -121,16 +171,17 @@ export async function fetchCategoriesParent(): Promise<QuizzdleParentCategory[]>
 }
 
 /**
- * GET /api/public/categories/{id}
+ * GET /api/public/categories/{id}?lang=en&q=all
  * Détail d'une catégorie (attributs, personnages) pour le jeu.
  * cache: 'no-store' pour toujours avoir des données à jour à l'ouverture d'une partie.
  * @throws Error avec message contenant le status (ex. "401") si !res.ok
  */
 export async function fetchCategoryById(
-  id: number | string
+  id: number | string,
+  lang: string = DEFAULT_LANG
 ): Promise<QuizzdleCategoryFull> {
   // ?q=all récupère tous les personnages de la catégorie côté serveur
-  const res = await fetch(`${BASE}/categories/${id}?q=all`, {
+  const res = await fetch(`${BASE}/categories/${id}?lang=${lang}&q=all`, {
     headers: headers(),
     cache: "no-store",
   });

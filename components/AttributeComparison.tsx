@@ -35,7 +35,7 @@ export function AttributeComparison({
       <table className={styles.attributesTable}>
         <thead>
           <tr>
-            <th className={styles.attributeCell}>Personnage</th>
+            <th className={styles.attributeCell}>Character</th>
             {comparisons.map((comparison, index) => (
               <th key={index} className={styles.attributeCell}>
                 {comparison.attributeNameFront}

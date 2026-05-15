@@ -9,9 +9,16 @@ pragma solidity ^0.8.24;
  * - Les guesses sont salés avec signature session + SALT_DECRYPT
  * - Impossible pour un observateur de décoder les réponses
  * - Chaque user a des hash uniques par session
- * - Le serveur signe (player, collection, day, saltedGuess, isCorrect, shouldFlag)
- *   liés à l'adresse du contrat — la correctness ne dépend plus d'une valeur
- *   publique manipulable côté client
+ * - Flow en 2 phases pour bloquer la triche par brute-force off-chain:
+ *     1. submitSaltedGuess: paye le fee, enregistre le commit on-chain.
+ *        Le serveur signe (contract, player, day, collection, saltedGuess,
+ *        shouldFlag). AUCUN bit de correctness n'est exposé à ce stade.
+ *     2. claimWin: appelé après que /api/reveal a validé le receipt et
+ *        attesté la correctness. Le serveur signe une attestation distincte
+ *        ("WIN" domain separator) que seul un joueur ayant un commit
+ *        on-chain matching peut utiliser.
+ *   Conséquence: chaque tentative de "deviner sans payer" est impossible —
+ *   il faut un commit on-chain payant pour obtenir une attestation de win.
  * - LE SERVEUR NE PAIE JAMAIS DE GAS
  */
 
@@ -25,7 +32,7 @@ contract Quizzdle {
     struct SaltedGuess {
         bytes32 saltedGuessHash;    // hash(characterId, sessionSig, SALT_DECRYPT)
         uint256 timestamp;
-        bool isCorrect;
+        bool isCorrect;             // false au commit ; passé à true par claimWin
     }
 
     struct UserSession {
@@ -84,11 +91,11 @@ contract Quizzdle {
     // ============ Events ============
 
     // Note: Pas de characterId dans les events ! C'est le but.
+    // Note: Pas de isCorrect non plus — le commit ne le connaît pas.
     event SaltedGuessMade(
         address indexed player,
         uint256 indexed collectionId,
         bytes32 saltedHash,     // Hash salé (indéchiffrable sans SALT_DECRYPT)
-        bool isCorrect,
         uint256 attempts
     );
 
@@ -96,6 +103,13 @@ contract Quizzdle {
         address indexed player,
         uint256 indexed collectionId,
         uint256 indexed day
+    );
+
+    event WinClaimed(
+        address indexed player,
+        uint256 indexed collectionId,
+        uint256 indexed day,
+        bytes32 saltedHash
     );
 
     event WalletFlagged(
@@ -130,52 +144,57 @@ contract Quizzdle {
     // ============ User Functions ============
 
     /**
-     * @dev Soumettre un guess salé. La correctness est attestée par le serveur
-     * via une signature liée à l'adresse de ce contrat (anti cross-deploy replay).
+     * @dev Phase 1: soumettre un commit de guess. Paye le fee mais
+     * n'enregistre PAS de victoire — la correctness n'est PAS connue à
+     * ce stade et n'est jamais exposée hors du serveur tant que le
+     * receipt onchain de cet appel n'est pas validé par /api/reveal.
+     *
+     * Sécurité anti-triche: pour apprendre si une réponse est correcte,
+     * le joueur doit avoir effectivement émis cette transaction (et donc
+     * payé le fee). Brute-force off-chain impossible.
      *
      * @param _collectionId Collection ID
-     * @param _saltedGuess  hash(guessedCharId, sessionSignature, SALT_DECRYPT) — opaque on-chain
-     * @param _isCorrect    Bit attesté par le serveur indiquant si _saltedGuess
-     *                      correspond bien au personnage du jour
+     * @param _saltedGuess  hash(guessedCharId, sessionSignature, SALT_DECRYPT)
      * @param _shouldFlag   true si multi-wallet détecté côté serveur (signé)
-     * @param _serverSignature Signature du serveur sur
-     *        keccak256(address(this), player, collectionId, day, saltedGuess, isCorrect, shouldFlag)
+     * @param _commitSignature Signature du serveur sur
+     *        keccak256("COMMIT", address(this), player, collectionId, day, saltedGuess, shouldFlag)
+     *        — AUCUN bit isCorrect dans le préimage. Le domain "COMMIT" empêche
+     *        toute confusion avec une signature WIN (domain distinct).
      */
     function submitSaltedGuess(
         uint256 _collectionId,
         bytes32 _saltedGuess,
-        bool _isCorrect,
         bool _shouldFlag,
-        bytes calldata _serverSignature
-    ) external payable returns (bool isCorrect, uint256 attempts) {
+        bytes calldata _commitSignature
+    ) external payable returns (uint256 attempts) {
         require(collectionExists[_collectionId], "Collection does not exist");
         require(msg.value >= feePerGuess, "Insufficient fee");
 
         uint256 currentDay = block.timestamp / 86400;
         UserSession storage session = userSessions[msg.sender][_collectionId][currentDay];
 
-        // Verrou anti-double-victoire
+        // Verrou anti-double-victoire: si déjà gagné aujourd'hui sur cette
+        // collection, plus aucun guess (réussi ou raté) n'est accepté.
         require(!session.hasWonToday, "Already won today");
 
-        // Vérifier la signature serveur sur CHAQUE appel (le serveur atteste la correctness)
-        // Inclut address(this) pour bloquer le replay cross-déploiement
+        // Vérifier la signature serveur de COMMIT (pas de isCorrect dedans).
+        // Domain "COMMIT" + address(this) bloquent à la fois le cross-replay
+        // entre signatures COMMIT/WIN et le replay cross-déploiement.
         bytes32 messageHash = keccak256(abi.encodePacked(
+            "COMMIT",
             address(this),
             msg.sender,
             _collectionId,
             currentDay,
             _saltedGuess,
-            _isCorrect,
             _shouldFlag
         ));
         bytes32 ethSignedHash = keccak256(abi.encodePacked(
             "\x19Ethereum Signed Message:\n32",
             messageHash
         ));
-        address signer = _recoverSigner(ethSignedHash, _serverSignature);
+        address signer = _recoverSigner(ethSignedHash, _commitSignature);
         require(signer == server, "Invalid server signature");
-
-        isCorrect = _isCorrect;
 
         // Auto-flag (signé par le serveur, l'utilisateur ne peut pas l'inverser)
         if (_shouldFlag && !flaggedWallets[msg.sender]) {
@@ -209,32 +228,110 @@ contract Quizzdle {
             _finalizeDay(currentDay - 1);
         }
 
-        // Enregistrer le guess
+        // Enregistrer le commit. isCorrect=false ici ; passera à true via claimWin.
         playerDailyGuesses[msg.sender][_collectionId][currentDay].push(SaltedGuess({
             saltedGuessHash: _saltedGuess,
             timestamp: block.timestamp,
-            isCorrect: isCorrect
+            isCorrect: false
         }));
 
         attempts = playerDailyGuesses[msg.sender][_collectionId][currentDay].length;
 
-        // Si correct, enregistrer la victoire
-        if (isCorrect) {
-            session.hasWonToday = true;
-            winsPerCollection[msg.sender][_collectionId]++;
-            totalWins[msg.sender]++;
-            globalTotalWins++;
-            winsPerDayPerCollection[_collectionId][currentDay]++;
-            totalWinsPerDay[currentDay]++;
-            playerTotalWinsPerDay[msg.sender][currentDay]++;
+        // Event sans characterId NI isCorrect — juste le hash opaque
+        emit SaltedGuessMade(msg.sender, _collectionId, _saltedGuess, attempts);
 
-            emit WinRecorded(msg.sender, _collectionId, currentDay);
+        return attempts;
+    }
+
+    /**
+     * @dev Phase 2: réclamer une victoire pour `_winner`. La signature lie
+     * `_winner`, donc n'importe qui peut soumettre la transaction — typiquement
+     * le serveur (relayer) pour économiser une popup wallet côté joueur. Le
+     * joueur lui-même peut aussi appeler la fonction en fallback si le
+     * relayer échoue.
+     *
+     * Sécurité: deux garde-fous indépendants
+     *   1) Signature serveur sur (WIN, contract, winner, collection, day, saltedGuess) —
+     *      le winner est dans le préimage, impossible de substituer un autre wallet.
+     *   2) Le contrat exige un commit on-chain matching dans
+     *      playerDailyGuesses[winner][collection][day] — donc même un serveur
+     *      compromis ne peut pas faire gagner un joueur qui n'a pas payé.
+     *
+     * msg.sender n'est PAS utilisé pour identifier le winner — la signature l'est.
+     * La victoire est créditée à `_winner`, pas à msg.sender.
+     *
+     * Gratuit (aucun fee) : le fee a été payé au commit. claimWin ne fait
+     * que matérialiser la victoire et coûte uniquement le gas.
+     *
+     * @param _winner       Le joueur qui gagne (créditée la victoire)
+     * @param _collectionId Collection ID
+     * @param _day          Jour du commit (block.timestamp/86400 lors de submitSaltedGuess)
+     * @param _saltedGuess  Le hash du commit gagnant
+     * @param _winSignature Signature serveur sur
+     *        keccak256("WIN", address(this), winner, collectionId, day, saltedGuess)
+     */
+    function claimWin(
+        address _winner,
+        uint256 _collectionId,
+        uint256 _day,
+        bytes32 _saltedGuess,
+        bytes calldata _winSignature
+    ) external {
+        require(_winner != address(0), "Invalid winner");
+        require(collectionExists[_collectionId], "Collection does not exist");
+
+        UserSession storage session = userSessions[_winner][_collectionId][_day];
+        require(!session.hasWonToday, "Already won today");
+
+        // Refuser les claims sur un jour déjà finalisé: rewardPerWinPerDay
+        // est figé à la finalisation, ajouter un winner après ce point
+        // déséquilibre la distribution.
+        require(!dayFinalized[_day], "Day already finalized");
+
+        // Vérifier la signature de victoire. Préimage distinct du commit
+        // (domain separator "WIN") + winner explicite → tout cross-usage
+        // ou substitution de winner est bloqué.
+        bytes32 messageHash = keccak256(abi.encodePacked(
+            "WIN",
+            address(this),
+            _winner,
+            _collectionId,
+            _day,
+            _saltedGuess
+        ));
+        bytes32 ethSignedHash = keccak256(abi.encodePacked(
+            "\x19Ethereum Signed Message:\n32",
+            messageHash
+        ));
+        address signer = _recoverSigner(ethSignedHash, _winSignature);
+        require(signer == server, "Invalid server signature");
+
+        // Exiger qu'un commit correspondant existe pour ce (winner, collection, day).
+        // Sans cette vérification, un serveur compromis pourrait signer des
+        // victoires pour des joueurs n'ayant jamais payé.
+        SaltedGuess[] storage guesses = playerDailyGuesses[_winner][_collectionId][_day];
+        bool found = false;
+        uint256 len = guesses.length;
+        for (uint256 i = 0; i < len; i++) {
+            if (guesses[i].saltedGuessHash == _saltedGuess) {
+                guesses[i].isCorrect = true;
+                found = true;
+                break;
+            }
         }
+        require(found, "No matching commit on-chain");
 
-        // Event sans characterId — juste le hash opaque
-        emit SaltedGuessMade(msg.sender, _collectionId, _saltedGuess, isCorrect, attempts);
+        // Enregistrer la victoire pour _winner (jamais pour msg.sender).
+        session.hasWonToday = true;
+        winsPerCollection[_winner][_collectionId]++;
+        totalWins[_winner]++;
+        globalTotalWins++;
+        winsPerDayPerCollection[_collectionId][_day]++;
+        totalWinsPerDay[_day]++;
+        playerTotalWinsPerDay[_winner][_day]++;
 
-        return (isCorrect, attempts);
+        emit WinRecorded(_winner, _collectionId, _day);
+        emit WinClaimed(_winner, _collectionId, _day, _saltedGuess);
     }
 
     /**

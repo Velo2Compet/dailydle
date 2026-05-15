@@ -10,11 +10,15 @@ require("dotenv").config({ path: ".env.local" });
  * Usage: npx hardhat run smart-contracts/scripts/register-collections.js --network base-sepolia
  */
 
-const NEXT_PUBLIC_QUIZZDLE_API_URL = process.env.NEXT_PUBLIC_QUIZZDLE_API_URL || "https://quizzdle.fr";
+const NEXT_PUBLIC_QUIZZDLE_API_URL = process.env.NEXT_PUBLIC_QUIZZDLE_API_URL || "https://quizzdle.com";
 const QUIZZDLE_API_KEY = process.env.QUIZZDLE_API_KEY;
 
-async function fetchCategories() {
-  const response = await fetch(`${NEXT_PUBLIC_QUIZZDLE_API_URL}/api/public/categories`, {
+const LANG = "en";
+const PAGE_LIMIT = 50; // server cap
+
+async function fetchPage(page) {
+  const url = `${NEXT_PUBLIC_QUIZZDLE_API_URL}/api/public/categories?lang=${LANG}&limit=${PAGE_LIMIT}&page=${page}`;
+  const response = await fetch(url, {
     headers: {
       "x-api-key": QUIZZDLE_API_KEY,
       "Content-Type": "application/json",
@@ -22,12 +26,29 @@ async function fetchCategories() {
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch categories: ${response.status} ${response.statusText}`);
+    throw new Error(`Failed to fetch categories (page ${page}): ${response.status} ${response.statusText}`);
   }
 
   const data = await response.json();
-  const raw = data?.data ?? (Array.isArray(data) ? data : []);
-  return Array.isArray(raw) ? raw : [];
+  const items = data?.data ?? (Array.isArray(data) ? data : []);
+  const pagination = data?.pagination ?? null;
+  return { items: Array.isArray(items) ? items : [], pagination };
+}
+
+/**
+ * Fetch the whole catalogue. The /categories endpoint is paginated and
+ * capped at 50 per page server-side — the original version of this script
+ * only read page 1, silently truncating to the first 20 (default limit).
+ */
+async function fetchCategories() {
+  const first = await fetchPage(1);
+  const totalPages = first.pagination?.total_pages ?? 1;
+  if (totalPages <= 1) return first.items;
+
+  const restUrls = [];
+  for (let p = 2; p <= totalPages; p++) restUrls.push(p);
+  const rest = await Promise.all(restUrls.map((p) => fetchPage(p)));
+  return first.items.concat(...rest.map((r) => r.items));
 }
 
 async function main() {
