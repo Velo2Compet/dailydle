@@ -9,7 +9,9 @@
     "lint": "next lint",
     "compile": "hardhat compile",
     "deploy:base-sepolia": "hardhat run smart-contracts/scripts/deploy.js --network base-sepolia",
-    "deploy:base": "hardhat run smart-contracts/scripts/deploy.js --network base"
+    "deploy:base": "hardhat run smart-contracts/scripts/deploy.js --network base",
+    "setup:base-sepolia": "hardhat run smart-contracts/scripts/deploy-and-setup.js --network base-sepolia",
+    "setup:base": "hardhat run smart-contracts/scripts/deploy-and-setup.js --network base"
   },
   "dependencies": {
     "@coinbase/onchainkit": "latest",

@@ -207,6 +207,19 @@ export function useSecureGame(collection: Collection) {
   // Guard against double-reveal across re-renders.
   const revealInFlightRef = useRef<string | null>(null);
 
+  // Sticky optimistic-claim flag.
+  //
+  // After a successful claimWin tx, we flip hasWonToday=true locally so the
+  // victory card switches to the "claimed" state immediately. But Base
+  // Sepolia / mainnet public RPCs can lag 5–15s on state reads — the very
+  // next `refetchSession()` we trigger may still return the OLD state
+  // (hasWon=false). Without this guard, the sessionData effect would clobber
+  // the optimistic flip and the UI would flicker back to "claim win onchain"
+  // until a later refetch caught up. With it, any RPC read showing
+  // hasWon=false is ignored while the flag is set. The flag clears itself
+  // the first time the RPC actually confirms hasWon=true.
+  const optimisticClaimRef = useRef(false);
+
   // Batch feePerGuess + getUserSession into a single Multicall3 read.
   // Without this, every render of the game page fires 2 eth_call requests
   // — and getUserSession refetches on every focus change. Now: 1 multicall
@@ -294,17 +307,32 @@ export function useSecureGame(collection: Collection) {
     initializedRef.current = true;
   }, [address, collection.id, currentDay]);
 
-  // Update game state from session data
+  // Update game state from session data.
+  //
+  // While `optimisticClaimRef.current` is set (i.e. we just observed a
+  // successful claimWin tx and the RPC may still be lagging on state
+  // reads), a stale `hasWon=false` is ignored — we keep hasWonToday=true
+  // locally and only update attemptsToday. The flag clears itself as soon
+  // as the RPC confirms the win.
   useEffect(() => {
-    if (sessionData) {
-      const [hasWon, attempts] = sessionData as [boolean, bigint];
+    if (!sessionData) return;
+    const [hasWon, attempts] = sessionData as readonly [boolean, bigint];
 
+    if (optimisticClaimRef.current && !hasWon) {
       setGameState((prev) => ({
         ...prev,
-        hasWonToday: hasWon,
         attemptsToday: Number(attempts),
       }));
+      return;
     }
+    if (hasWon) {
+      optimisticClaimRef.current = false;
+    }
+    setGameState((prev) => ({
+      ...prev,
+      hasWonToday: hasWon,
+      attemptsToday: Number(attempts),
+    }));
   }, [sessionData]);
 
   // Handle successful commit transaction.
@@ -710,6 +738,11 @@ export function useSecureGame(collection: Collection) {
   // the node to admit it. We still refetch in the background to reconcile.
   useEffect(() => {
     if (isClaimSuccess) {
+      // Sticky flag: tells the sessionData effect to disregard any RPC read
+      // showing hasWon=false from here until the RPC actually confirms the
+      // win. Without this guard, the immediate refetch below would clobber
+      // the optimistic flip and the UI would flicker back to "claim win".
+      optimisticClaimRef.current = true;
       setGameState((prev) => (prev.hasWonToday ? prev : { ...prev, hasWonToday: true }));
       refetchSession();
       resetClaimTx();
