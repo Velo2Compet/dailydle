@@ -263,15 +263,28 @@ export async function POST(request: NextRequest) {
 
     const normalizedPlayer = playerAddress.toLowerCase();
 
-    // Check user session on-chain (to see if already won)
-    const session = await publicClient.readContract({
-      address: CONTRACT_ADDRESS,
-      abi: saltedContractAbi,
-      functionName: "getUserSession",
-      args: [playerAddress as `0x${string}`, BigInt(collectionId), BigInt(currentDay)],
+    // Batch the two on-chain reads we need (getUserSession + feePerGuess)
+    // into a single Multicall3 round trip — saves one RPC call per guess.
+    // viem auto-uses Multicall3 from the chain config on Base + Base Sepolia.
+    const [sessionResult, feeResult] = await publicClient.multicall({
+      allowFailure: false,
+      contracts: [
+        {
+          address: CONTRACT_ADDRESS,
+          abi: saltedContractAbi,
+          functionName: "getUserSession",
+          args: [playerAddress as `0x${string}`, BigInt(collectionId), BigInt(currentDay)],
+        },
+        {
+          address: CONTRACT_ADDRESS,
+          abi: saltedContractAbi,
+          functionName: "feePerGuess",
+        },
+      ],
     });
 
-    const [hasWonToday] = session as [boolean, bigint];
+    const [hasWonToday] = sessionResult as readonly [boolean, bigint];
+    const feePerGuess = feeResult as bigint;
 
     // Verify user hasn't already won
     if (hasWonToday) {
@@ -368,12 +381,8 @@ export async function POST(request: NextRequest) {
       collection.attributes
     );
 
-    // Get fee per guess
-    const feePerGuess = await publicClient.readContract({
-      address: CONTRACT_ADDRESS,
-      abi: saltedContractAbi,
-      functionName: "feePerGuess",
-    });
+    // feePerGuess was already fetched above in the same multicall as
+    // getUserSession — no extra RPC call here.
 
     // Stash sensitive data server-side, keyed by the opaque saltedGuess.
     // /api/reveal will hand this over after on-chain payment is proven.

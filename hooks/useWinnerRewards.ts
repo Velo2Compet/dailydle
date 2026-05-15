@@ -1,5 +1,5 @@
 "use client";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useChainId, useSwitchChain } from "wagmi";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useReadContracts, useChainId, useSwitchChain } from "wagmi";
 import { useCallback } from "react";
 import { parseAbi } from "viem";
 import { APP_CHAIN_ID } from "@/lib/chain-config";
@@ -42,96 +42,77 @@ export function useCurrentDay() {
 }
 
 /**
- * Hook to get winner rewards data for a specific day
+ * Hook to get winner rewards data for a specific day.
+ *
+ * Collapses 5 separate reads into ONE `useReadContracts` call. viem routes
+ * it through Multicall3 (auto-detected on Base + Base Sepolia) so this is
+ * a single eth_call to the RPC instead of five. Big win on /profile, where
+ * this hook is invoked twice (yesterday + today) — 10 reads → 2.
  */
 export function useWinnerRewardsForDay(day: number | null) {
   const { address, isConnected } = useAccount();
-  const enabled = !!address && isConnected && day !== null && GAME_CONTRACT_ADDRESS !== "0x0000000000000000000000000000000000000000";
+  const playerEnabled = !!address && isConnected && day !== null && GAME_CONTRACT_ADDRESS !== "0x0000000000000000000000000000000000000000";
+  const dayEnabled = day !== null && GAME_CONTRACT_ADDRESS !== "0x0000000000000000000000000000000000000000";
 
-  // Get pending rewards for the day
-  const { data: pendingRewards, refetch: refetchPending } = useReadContract({
-    address: GAME_CONTRACT_ADDRESS,
-    abi: WINNER_REWARDS_ABI,
-    functionName: "getPendingWinnerRewards",
-    args: address && day !== null ? [address, BigInt(day)] : undefined,
-    chainId: APP_CHAIN_ID,
+  const { data, refetch } = useReadContracts({
+    contracts: [
+      {
+        address: GAME_CONTRACT_ADDRESS,
+        abi: WINNER_REWARDS_ABI,
+        functionName: "getPendingWinnerRewards",
+        args: address && day !== null ? [address, BigInt(day)] : undefined,
+        chainId: APP_CHAIN_ID,
+      },
+      {
+        address: GAME_CONTRACT_ADDRESS,
+        abi: WINNER_REWARDS_ABI,
+        functionName: "playerTotalWinsPerDay",
+        args: address && day !== null ? [address, BigInt(day)] : undefined,
+        chainId: APP_CHAIN_ID,
+      },
+      {
+        address: GAME_CONTRACT_ADDRESS,
+        abi: WINNER_REWARDS_ABI,
+        functionName: "claimedDays",
+        args: address && day !== null ? [address, BigInt(day)] : undefined,
+        chainId: APP_CHAIN_ID,
+      },
+      {
+        address: GAME_CONTRACT_ADDRESS,
+        abi: WINNER_REWARDS_ABI,
+        functionName: "dayFinalized",
+        args: day !== null ? [BigInt(day)] : undefined,
+        chainId: APP_CHAIN_ID,
+      },
+      {
+        address: GAME_CONTRACT_ADDRESS,
+        abi: WINNER_REWARDS_ABI,
+        functionName: "rewardPerWinPerDay",
+        args: day !== null ? [BigInt(day)] : undefined,
+        chainId: APP_CHAIN_ID,
+      },
+    ],
+    allowFailure: true,
     query: {
-      enabled,
+      enabled: playerEnabled || dayEnabled,
       staleTime: CACHE_TIME,
       refetchOnWindowFocus: true,
     },
   });
 
-  // Get player wins for the day
-  const { data: playerWins, refetch: refetchWins } = useReadContract({
-    address: GAME_CONTRACT_ADDRESS,
-    abi: WINNER_REWARDS_ABI,
-    functionName: "playerTotalWinsPerDay",
-    args: address && day !== null ? [address, BigInt(day)] : undefined,
-    chainId: APP_CHAIN_ID,
-    query: {
-      enabled,
-      staleTime: CACHE_TIME,
-      refetchOnWindowFocus: true,
-    },
-  });
-
-  // Check if already claimed
-  const { data: hasClaimed, refetch: refetchClaimed } = useReadContract({
-    address: GAME_CONTRACT_ADDRESS,
-    abi: WINNER_REWARDS_ABI,
-    functionName: "claimedDays",
-    args: address && day !== null ? [address, BigInt(day)] : undefined,
-    chainId: APP_CHAIN_ID,
-    query: {
-      enabled,
-      staleTime: CACHE_TIME,
-      refetchOnWindowFocus: true,
-    },
-  });
-
-  // Check if day is finalized
-  const { data: isFinalized, refetch: refetchFinalized } = useReadContract({
-    address: GAME_CONTRACT_ADDRESS,
-    abi: WINNER_REWARDS_ABI,
-    functionName: "dayFinalized",
-    args: day !== null ? [BigInt(day)] : undefined,
-    chainId: APP_CHAIN_ID,
-    query: {
-      enabled: day !== null && GAME_CONTRACT_ADDRESS !== "0x0000000000000000000000000000000000000000",
-      staleTime: CACHE_TIME,
-      refetchOnWindowFocus: true,
-    },
-  });
-
-  // Get reward per win for the day (for display)
-  const { data: rewardPerWin } = useReadContract({
-    address: GAME_CONTRACT_ADDRESS,
-    abi: WINNER_REWARDS_ABI,
-    functionName: "rewardPerWinPerDay",
-    args: day !== null ? [BigInt(day)] : undefined,
-    chainId: APP_CHAIN_ID,
-    query: {
-      enabled: day !== null && GAME_CONTRACT_ADDRESS !== "0x0000000000000000000000000000000000000000",
-      staleTime: CACHE_TIME,
-      refetchOnWindowFocus: true,
-    },
-  });
-
-  const refetchAll = useCallback(() => {
-    refetchPending();
-    refetchWins();
-    refetchClaimed();
-    refetchFinalized();
-  }, [refetchPending, refetchWins, refetchClaimed, refetchFinalized]);
+  const pendingRewards = data?.[0]?.status === "success" ? (data[0].result as bigint) : BigInt(0);
+  const playerWins = data?.[1]?.status === "success" ? Number(data[1].result as bigint) : 0;
+  const hasClaimed = data?.[2]?.status === "success" ? Boolean(data[2].result) : false;
+  const isFinalized = data?.[3]?.status === "success" ? Boolean(data[3].result) : false;
+  const rewardPerWin = data?.[4]?.status === "success" ? (data[4].result as bigint) : BigInt(0);
 
   return {
-    pendingRewards: pendingRewards ? BigInt(pendingRewards.toString()) : BigInt(0),
-    playerWins: playerWins ? Number(playerWins) : 0,
-    hasClaimed: Boolean(hasClaimed),
-    isFinalized: Boolean(isFinalized),
-    rewardPerWin: rewardPerWin ? BigInt(rewardPerWin.toString()) : BigInt(0),
-    refetch: refetchAll,
+    pendingRewards,
+    playerWins,
+    hasClaimed,
+    isFinalized,
+    rewardPerWin,
+    refetch,
   };
 }
 

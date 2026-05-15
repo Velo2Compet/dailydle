@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { useAccount, useReadContract } from "wagmi";
+import { useAccount, useReadContracts } from "wagmi";
 import { useMiniKit } from "@coinbase/onchainkit/minikit";
 import { parseAbi } from "viem";
 import { APP_CHAIN_ID } from "@/lib/chain-config";
@@ -208,32 +208,52 @@ export function GameBoard({ collection }: GameBoardProps) {
     isGameWon: isWonForUi,
   };
 
-  // Read collection stats from contract
-  const { data: userWins } = useReadContract({
-    address: CONTRACT_ADDRESS,
-    abi: statsAbi,
-    functionName: "winsPerCollection",
-    args: address ? [address, BigInt(collection.id)] : undefined,
-    chainId: APP_CHAIN_ID,
-    query: { enabled: !!address && !!CONTRACT_ADDRESS },
+  // Batch all four contract reads (3 stats + collectionExists) into ONE
+  // Multicall3 call via `useReadContracts`. Previously each was a separate
+  // eth_call, with no staleTime — every render re-hit the RPC. Now: one
+  // call cached for 60s.
+  const { data: statsData } = useReadContracts({
+    contracts: [
+      {
+        address: CONTRACT_ADDRESS,
+        abi: statsAbi,
+        functionName: "winsPerCollection",
+        args: address ? [address, BigInt(collection.id)] : undefined,
+        chainId: APP_CHAIN_ID,
+      },
+      {
+        address: CONTRACT_ADDRESS,
+        abi: statsAbi,
+        functionName: "winsPerDayPerCollection",
+        args: [BigInt(collection.id), BigInt(currentDay)],
+        chainId: APP_CHAIN_ID,
+      },
+      {
+        address: CONTRACT_ADDRESS,
+        abi: statsAbi,
+        functionName: "globalTotalWins",
+        chainId: APP_CHAIN_ID,
+      },
+      {
+        address: CONTRACT_ADDRESS,
+        abi: statsAbi,
+        functionName: "collectionExists",
+        args: [BigInt(collection.id)],
+        chainId: APP_CHAIN_ID,
+      },
+    ],
+    allowFailure: true,
+    query: {
+      enabled: !!CONTRACT_ADDRESS && !!collection.id,
+      staleTime: 60_000,
+      refetchOnWindowFocus: false,
+    },
   });
 
-  const { data: winnersToday } = useReadContract({
-    address: CONTRACT_ADDRESS,
-    abi: statsAbi,
-    functionName: "winsPerDayPerCollection",
-    args: [BigInt(collection.id), BigInt(currentDay)],
-    chainId: APP_CHAIN_ID,
-    query: { enabled: !!CONTRACT_ADDRESS },
-  });
-
-  const { data: totalWinners } = useReadContract({
-    address: CONTRACT_ADDRESS,
-    abi: statsAbi,
-    functionName: "globalTotalWins",
-    chainId: APP_CHAIN_ID,
-    query: { enabled: !!CONTRACT_ADDRESS },
-  });
+  const userWins = statsData?.[0]?.status === "success" ? (statsData[0].result as bigint) : undefined;
+  const winnersToday = statsData?.[1]?.status === "success" ? (statsData[1].result as bigint) : undefined;
+  const totalWinners = statsData?.[2]?.status === "success" ? (statsData[2].result as bigint) : undefined;
+  const collectionExists = statsData?.[3]?.status === "success" ? (statsData[3].result as boolean) : undefined;
 
   const collectionStats = {
     userWins: userWins ? Number(userWins) : 0,
@@ -255,18 +275,6 @@ export function GameBoard({ collection }: GameBoardProps) {
       });
     }
   }, [gameState.dailyCharacter, hasWonToday, collection.id, collection.name]);
-
-  // Vérifier que la collection existe dans le contrat
-  const { data: collectionExists } = useReadContract({
-    address: CONTRACT_ADDRESS,
-    abi: statsAbi,
-    functionName: "collectionExists",
-    args: [BigInt(collection.id)],
-    chainId: APP_CHAIN_ID,
-    query: {
-      enabled: !!collection.id && !!CONTRACT_ADDRESS,
-    },
-  });
 
   // Vérifier si un personnage a déjà été deviné
   const alreadyGuessed = (characterId: number) => {

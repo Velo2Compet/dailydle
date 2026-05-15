@@ -232,21 +232,55 @@ export function quizzdleImageUrl(path: string | null | undefined): string {
 
 /**
  * Filter categories to only include those registered in the smart contract.
- * This prevents showing games that would fail with "Collection does not exist".
+ * Prevents showing games that would fail with "Collection does not exist".
+ *
+ * Implementation notes:
+ * - Uses Multicall3 (`client.multicall`) instead of N parallel `eth_call`s.
+ *   On Base + Base Sepolia, Multicall3 is at the canonical 0xcA11… address
+ *   and viem auto-detects it from the chain config. 40 categories used to
+ *   mean 40 RPC round trips per home render; now it's a single call.
+ * - Result is memoised for `REGISTERED_CACHE_TTL_MS` so back-to-back page
+ *   renders don't repeatedly hit the chain. The set of registered
+ *   collections only changes when an admin calls `addCollection` /
+ *   `removeCollection`, so a few-minute lag is acceptable. The cache is
+ *   per-server-instance — cold starts re-prime it once. If you ever want
+ *   instant invalidation, hit the admin endpoint and call `invalidateRegisteredCollections`.
  */
+
+const REGISTERED_CACHE_TTL_MS = 5 * 60 * 1000;
+
+interface RegisteredCacheEntry {
+  contract: string;
+  registeredIds: Set<number>;
+  expiresAt: number;
+}
+let registeredCache: RegisteredCacheEntry | null = null;
+
+export function invalidateRegisteredCollections(): void {
+  registeredCache = null;
+}
+
 export async function filterRegisteredCollections(
   categories: QuizzdleCategoryRef[]
 ): Promise<QuizzdleCategoryRef[]> {
   if (categories.length === 0) return [];
 
-  const { createPublicClient, http, parseAbi } = await import("viem");
-  const { APP_CHAIN, RPC_URL } = await import("@/lib/chain-config");
-
-  const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}`;
+  const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}` | undefined;
   if (!CONTRACT_ADDRESS || CONTRACT_ADDRESS === "0x0000000000000000000000000000000000000000") {
     console.warn("Contract address not configured, showing all categories");
     return categories;
   }
+
+  const cacheKey = CONTRACT_ADDRESS.toLowerCase();
+  const now = Date.now();
+
+  // Cache hit: just filter the request against the memoised set.
+  if (registeredCache && registeredCache.contract === cacheKey && registeredCache.expiresAt > now) {
+    return categories.filter((c) => registeredCache!.registeredIds.has(c.id));
+  }
+
+  const { createPublicClient, http, parseAbi } = await import("viem");
+  const { APP_CHAIN, RPC_URL } = await import("@/lib/chain-config");
 
   const abi = parseAbi([
     "function collectionExists(uint256 _collectionId) external view returns (bool)",
@@ -257,28 +291,43 @@ export async function filterRegisteredCollections(
     transport: http(RPC_URL),
   });
 
-  // Check all collections in parallel
-  const results = await Promise.all(
-    categories.map(async (cat) => {
-      try {
-        const exists = await client.readContract({
-          address: CONTRACT_ADDRESS,
-          abi,
-          functionName: "collectionExists",
-          args: [BigInt(cat.id)],
-        });
-        return { cat, exists };
-      } catch (error) {
-        console.warn(`Failed to check collection ${cat.id}:`, error);
-        return { cat, exists: false };
-      }
-    })
-  );
+  // ONE RPC call for the whole list via Multicall3.
+  let results: { status: "success" | "failure"; result?: boolean }[];
+  try {
+    results = (await client.multicall({
+      allowFailure: true,
+      contracts: categories.map((cat) => ({
+        address: CONTRACT_ADDRESS,
+        abi,
+        functionName: "collectionExists" as const,
+        args: [BigInt(cat.id)] as const,
+      })),
+    })) as { status: "success" | "failure"; result?: boolean }[];
+  } catch (error) {
+    // If multicall fails entirely (RPC down, multicall3 unavailable on a
+    // custom chain, etc.), don't pretend nothing is registered — that would
+    // make the home empty. Show everything and log loudly.
+    console.warn("[Collections] multicall failed, showing unfiltered list:", error);
+    return categories;
+  }
 
-  const registered = results.filter((r) => r.exists).map((r) => r.cat);
+  const registeredIds = new Set<number>();
+  results.forEach((r, i) => {
+    if (r.status === "success" && r.result === true) {
+      registeredIds.add(categories[i].id);
+    }
+  });
+
+  registeredCache = {
+    contract: cacheKey,
+    registeredIds,
+    expiresAt: now + REGISTERED_CACHE_TTL_MS,
+  };
+
+  const registered = categories.filter((c) => registeredIds.has(c.id));
 
   if (registered.length < categories.length) {
-    const missing = categories.filter((c) => !registered.find((r) => r.id === c.id));
+    const missing = categories.filter((c) => !registeredIds.has(c.id));
     console.log(
       `[Collections] ${registered.length}/${categories.length} registered. Missing: ${missing.map((c) => c.id).join(", ")}`
     );

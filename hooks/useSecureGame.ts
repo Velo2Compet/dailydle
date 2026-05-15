@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { useAccount, useSignMessage, useWriteContract, useReadContract, useWaitForTransactionReceipt, useChainId, useSwitchChain } from "wagmi";
+import { useAccount, useSignMessage, useWriteContract, useReadContracts, useWaitForTransactionReceipt, useChainId, useSwitchChain } from "wagmi";
 import { parseAbi } from "viem";
 import { APP_CHAIN_ID } from "@/lib/chain-config";
 import type { Collection, Character, AttributeComparison } from "@/types/game";
@@ -207,25 +207,41 @@ export function useSecureGame(collection: Collection) {
   // Guard against double-reveal across re-renders.
   const revealInFlightRef = useRef<string | null>(null);
 
-  // Read fee per guess
-  const { data: feePerGuess } = useReadContract({
-    address: CONTRACT_ADDRESS,
-    abi: saltedContractAbi,
-    functionName: "feePerGuess",
-    chainId: APP_CHAIN_ID,
-  });
-
-  // Read user session
-  const { data: sessionData, refetch: refetchSession } = useReadContract({
-    address: CONTRACT_ADDRESS,
-    abi: saltedContractAbi,
-    functionName: "getUserSession",
-    args: address ? [address, BigInt(collection.id), BigInt(currentDay)] : undefined,
-    chainId: APP_CHAIN_ID,
+  // Batch feePerGuess + getUserSession into a single Multicall3 read.
+  // Without this, every render of the game page fires 2 eth_call requests
+  // — and getUserSession refetches on every focus change. Now: 1 multicall
+  // with a short staleTime (sub-block-time so commit/claim flow stays
+  // accurate, but no thrashing on render).
+  const { data: gameReads, refetch: refetchSession } = useReadContracts({
+    contracts: [
+      {
+        address: CONTRACT_ADDRESS,
+        abi: saltedContractAbi,
+        functionName: "feePerGuess",
+        chainId: APP_CHAIN_ID,
+      },
+      {
+        address: CONTRACT_ADDRESS,
+        abi: saltedContractAbi,
+        functionName: "getUserSession",
+        args: address ? [address, BigInt(collection.id), BigInt(currentDay)] : undefined,
+        chainId: APP_CHAIN_ID,
+      },
+    ],
+    allowFailure: true,
     query: {
       enabled: !!address && !!collection.id,
+      staleTime: 10_000,
+      refetchOnWindowFocus: false,
     },
   });
+
+  const feePerGuess = gameReads?.[0]?.status === "success"
+    ? (gameReads[0].result as bigint)
+    : undefined;
+  const sessionData = gameReads?.[1]?.status === "success"
+    ? (gameReads[1].result as readonly [boolean, bigint])
+    : undefined;
 
   // Submit guess transaction (the COMMIT step — paid)
   const { writeContractAsync: submitGuessAsync, data: guessTxHash, reset: resetGuessTx } = useWriteContract();
