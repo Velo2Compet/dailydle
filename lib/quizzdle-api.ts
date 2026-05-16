@@ -171,6 +171,48 @@ export async function fetchCategoriesParent(
 }
 
 /**
+ * GET /api/public/parent-categories/{id}?lang=en
+ * Détail d'un parent avec ses catégories enfants.
+ * Le listing /parent-categories ne renvoie PAS les enfants — il faut taper
+ * l'endpoint détail pour les avoir.
+ */
+async function fetchParentCategoryById(
+  id: number | string,
+  lang: string = DEFAULT_LANG
+): Promise<QuizzdleParentCategory | null> {
+  try {
+    const res = await fetch(`${BASE}/parent-categories/${id}?lang=${lang}`, {
+      headers: headers(),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return (json?.data ?? json) as QuizzdleParentCategory;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Liste des parents *avec leurs catégories enfants hydratées*. Combine
+ * `fetchCategoriesParent` (qui ne renvoie pas les enfants) avec un appel
+ * détail par parent en parallèle. ~5 parents au catalogue, donc 6 round
+ * trips totaux — acceptable pour un rendu serveur.
+ */
+export async function fetchParentCategoriesWithChildren(
+  lang: string = DEFAULT_LANG
+): Promise<QuizzdleParentCategory[]> {
+  const shells = await fetchCategoriesParent(lang);
+  if (shells.length === 0) return [];
+  const hydrated = await Promise.all(
+    shells.map(async (p) => {
+      const detail = await fetchParentCategoryById(p.id, lang);
+      return detail ?? { ...p, categories: [] };
+    })
+  );
+  return hydrated;
+}
+
+/**
  * GET /api/public/categories/{id}?lang=en&q=all
  * Détail d'une catégorie (attributs, personnages) pour le jeu.
  * cache: 'no-store' pour toujours avoir des données à jour à l'ouverture d'une partie.
