@@ -151,22 +151,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Tx must come from the claimed player and target our contract.
-    if (receipt.from.toLowerCase() !== normalizedPlayer) {
-      return NextResponse.json(
-        { error: "Transaction sender does not match player" },
-        { status: 403 }
-      );
-    }
-    if (!receipt.to || receipt.to.toLowerCase() !== CONTRACT_ADDRESS.toLowerCase()) {
-      return NextResponse.json(
-        { error: "Transaction does not target the game contract" },
-        { status: 403 }
-      );
-    }
-
-    // Decode logs and require a SaltedGuessMade event whose saltedHash
-    // matches the one we issued, with the same player and collection.
+    // We do NOT check receipt.from / receipt.to here. Smart wallets
+    // (Coinbase Smart Wallet on Base App, Safe, etc.) route through an
+    // ERC-4337 bundler + EntryPoint, so tx.from is the bundler and tx.to
+    // is the EntryPoint — neither equals the player or our contract.
+    //
+    // The event check below is the authoritative one: SaltedGuessMade is
+    // emitted by OUR contract with `player` set to msg.sender, which IS
+    // the smart wallet's address (i.e. the player). The emitter address
+    // is also pinned to CONTRACT_ADDRESS so an attacker can't pollute the
+    // receipt with a forged event from another contract.
     const decoded = parseEventLogs({
       abi: saltedGuessMadeAbi,
       eventName: "SaltedGuessMade",
@@ -174,6 +168,9 @@ export async function POST(request: NextRequest) {
     });
 
     const matching = decoded.find((log) => {
+      if (log.address.toLowerCase() !== CONTRACT_ADDRESS.toLowerCase()) {
+        return false;
+      }
       const args = log.args as {
         player: `0x${string}`;
         collectionId: bigint;
