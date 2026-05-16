@@ -642,10 +642,24 @@ export function useSecureGame(collection: Collection) {
       } catch (error) {
         console.error("Submit guess error:", error);
         pendingGuessRef.current = null;
+        const e = error as {
+          shortMessage?: string;
+          details?: string;
+          message?: string;
+          cause?: { shortMessage?: string; reason?: string; message?: string };
+        };
+        const detail =
+          e?.cause?.shortMessage ||
+          e?.cause?.reason ||
+          e?.cause?.message ||
+          e?.shortMessage ||
+          e?.details ||
+          e?.message ||
+          "Failed to submit guess";
         setGameState((prev) => ({
           ...prev,
           isLoading: false,
-          error: error instanceof Error ? error.message : "Failed to submit guess",
+          error: `[debug] ${detail}`,
         }));
         return null;
       }

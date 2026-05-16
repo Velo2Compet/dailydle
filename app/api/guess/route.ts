@@ -405,6 +405,19 @@ export async function POST(request: NextRequest) {
       day: currentDay,
     });
 
+    console.log("[commit-debug]", {
+      ua: request.headers.get("user-agent"),
+      player: checksummedPlayer,
+      contract: checksummedContract,
+      collectionId,
+      day: currentDay,
+      saltedGuess,
+      shouldFlag,
+      commitSigLen: commitSignature.length,
+      commitSigPrefix: commitSignature.slice(0, 10),
+      feePerGuess: feePerGuess.toString(),
+    });
+
     // Minimal response: just what's needed for the COMMIT tx. No
     // correctness bit, no attribute hints, no daily character, no
     // guessed character details — those land via /api/reveal after the
