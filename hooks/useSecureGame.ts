@@ -659,7 +659,7 @@ export function useSecureGame(collection: Collection) {
         setGameState((prev) => ({
           ...prev,
           isLoading: false,
-          error: `[debug] ${detail}`,
+          error: detail,
         }));
         return null;
       }

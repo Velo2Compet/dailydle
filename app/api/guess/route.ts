@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  verifyMessage,
   createPublicClient,
   http,
   parseAbi,
@@ -235,13 +234,28 @@ export async function POST(request: NextRequest) {
     // Calculate current day
     const currentDay = Math.floor(Date.now() / 1000 / 86400);
 
-    // Verify the session signature (one signature per day for all collections)
+    // Verify the session signature (one signature per day for all collections).
+    //
+    // Uses publicClient.verifyMessage (not the standalone viem helper) so we
+    // also accept ERC-1271 / ERC-6492 signatures from smart wallets — Coinbase
+    // Smart Wallet (Base App), Safe, etc. The standalone helper only does
+    // EOA-style 65-byte ECDSA recover and throws "invalid signature length"
+    // when a smart-wallet sig comes in.
     const expectedMessage = getSessionMessage(currentDay);
-    const isValidSignature = await verifyMessage({
-      address: playerAddress as `0x${string}`,
-      message: expectedMessage,
-      signature: sessionSignature as `0x${string}`,
-    });
+    let isValidSignature = false;
+    try {
+      isValidSignature = await publicClient.verifyMessage({
+        address: playerAddress as `0x${string}`,
+        message: expectedMessage,
+        signature: sessionSignature as `0x${string}`,
+      });
+    } catch (err) {
+      console.warn("[session-sig] verifyMessage threw", {
+        player: playerAddress,
+        sigLen: sessionSignature?.length,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
 
     if (!isValidSignature) {
       return NextResponse.json(
@@ -403,19 +417,6 @@ export async function POST(request: NextRequest) {
       playerAddress: normalizedPlayer,
       collectionId,
       day: currentDay,
-    });
-
-    console.log("[commit-debug]", {
-      ua: request.headers.get("user-agent"),
-      player: checksummedPlayer,
-      contract: checksummedContract,
-      collectionId,
-      day: currentDay,
-      saltedGuess,
-      shouldFlag,
-      commitSigLen: commitSignature.length,
-      commitSigPrefix: commitSignature.slice(0, 10),
-      feePerGuess: feePerGuess.toString(),
     });
 
     // Minimal response: just what's needed for the COMMIT tx. No
