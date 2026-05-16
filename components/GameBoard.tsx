@@ -592,10 +592,6 @@ export function GameBoard({ collection }: GameBoardProps) {
                 <p className="text-center text-white mb-4">
                   Sign the daily session to start playing — one signature for the whole day, all collections.
                 </p>
-              ) : !isFeeLoaded ? (
-                <p className="text-center text-white mb-4 inline-flex items-center justify-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin" /> Loading contract fee…
-                </p>
               ) : (
                 <p className="text-center text-white mb-4">Search and choose a character to get started...</p>
               )}
@@ -646,7 +642,7 @@ export function GameBoard({ collection }: GameBoardProps) {
                         className="!h-12 !w-12 !p-0 !px-0 !py-0 flex items-center justify-center"
                         aria-label="Submit guess"
                       >
-                        {isLoading || isGuessPending ? (
+                        {isLoading || isGuessPending || !isFeeLoaded ? (
                           <Loader2 className="w-5 h-5 animate-spin" />
                         ) : (
                           <Send className="w-5 h-5" />
