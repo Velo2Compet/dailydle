@@ -32,6 +32,7 @@ export interface AttributeComparison {
   correctValue: string | string[] | number;
   isCorrect: boolean;
   isPartial?: boolean; // Pour les arrays, si une partie correspond
+  direction?: "higher" | "lower"; // Pour les attributs numériques: la vraie valeur est plus haute/basse que le guess
 }
 
 export interface GuessResult {

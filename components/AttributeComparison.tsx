@@ -22,7 +22,13 @@ export function AttributeComparison({
 
   const getArrow = (comparison: AttributeComparisonType) => {
     if (comparison.isCorrect) return "";
-    // Pour les valeurs numériques, afficher ↑ ou ↓
+    // Serveur renvoie un champ `direction` pour les attributs int (la
+    // vraie valeur est cachée pour anti-cheat, donc comparer
+    // guessValue/correctValue ne marche pas).
+    if (comparison.direction === "higher") return "↑";
+    if (comparison.direction === "lower") return "↓";
+    // Fallback pour d'éventuels attributs numériques où correctValue
+    // serait exposé en clair.
     if (typeof comparison.guessValue === "number" && typeof comparison.correctValue === "number") {
       if (comparison.guessValue > comparison.correctValue) return "↓";
       if (comparison.guessValue < comparison.correctValue) return "↑";
