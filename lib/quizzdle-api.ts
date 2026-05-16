@@ -321,8 +321,8 @@ export async function filterRegisteredCollections(
     return categories.filter((c) => registeredCache!.registeredIds.has(c.id));
   }
 
-  const { createPublicClient, http, parseAbi } = await import("viem");
-  const { APP_CHAIN, RPC_URL } = await import("@/lib/chain-config");
+  const { createPublicClient, parseAbi } = await import("viem");
+  const { APP_CHAIN, APP_TRANSPORT } = await import("@/lib/chain-config");
 
   const abi = parseAbi([
     "function collectionExists(uint256 _collectionId) external view returns (bool)",
@@ -330,7 +330,7 @@ export async function filterRegisteredCollections(
 
   const client = createPublicClient({
     chain: APP_CHAIN,
-    transport: http(RPC_URL),
+    transport: APP_TRANSPORT,
   });
 
   // ONE RPC call for the whole list via Multicall3.

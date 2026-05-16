@@ -34,7 +34,7 @@ export function useCurrentDay() {
     query: {
       enabled: GAME_CONTRACT_ADDRESS !== "0x0000000000000000000000000000000000000000",
       staleTime: CACHE_TIME,
-      refetchOnWindowFocus: true,
+      refetchOnWindowFocus: false,
     },
   });
 
@@ -96,7 +96,7 @@ export function useWinnerRewardsForDay(day: number | null) {
     query: {
       enabled: playerEnabled || dayEnabled,
       staleTime: CACHE_TIME,
-      refetchOnWindowFocus: true,
+      refetchOnWindowFocus: false,
     },
   });
 
@@ -210,7 +210,7 @@ export function useTotalPendingRewards(maxDaysToCheck: number = 30) {
     query: {
       enabled,
       staleTime: CACHE_TIME,
-      refetchOnWindowFocus: true,
+      refetchOnWindowFocus: false,
     },
   });
 

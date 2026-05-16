@@ -37,7 +37,7 @@ export function useFeePerGuess() {
       enabled:
         CONTRACT_ADDRESS !== "0x0000000000000000000000000000000000000000",
       staleTime: 10_000,
-      refetchOnWindowFocus: true,
+      refetchOnWindowFocus: false,
     },
   });
   return {

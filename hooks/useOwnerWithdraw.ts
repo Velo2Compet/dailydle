@@ -57,7 +57,7 @@ export function useOwnerWithdrawableAmount() {
     query: {
       enabled: isOwner && GAME_CONTRACT_ADDRESS !== "0x0000000000000000000000000000000000000000",
       staleTime: CACHE_TIME,
-      refetchOnWindowFocus: true,
+      refetchOnWindowFocus: false,
     },
   });
 

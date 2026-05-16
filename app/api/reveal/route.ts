@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   createPublicClient,
-  http,
   parseAbi,
   parseEventLogs,
   isAddress,
@@ -11,7 +10,7 @@ import {
   getAddress,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { APP_CHAIN, RPC_URL } from "@/lib/chain-config";
+import { APP_CHAIN, APP_TRANSPORT } from "@/lib/chain-config";
 import {
   getPendingReveal,
   markRevealedFirstTime,
@@ -27,7 +26,7 @@ const saltedGuessMadeAbi = parseAbi([
 
 const publicClient = createPublicClient({
   chain: APP_CHAIN,
-  transport: http(RPC_URL),
+  transport: APP_TRANSPORT,
 });
 
 /**

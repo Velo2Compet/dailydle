@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createWalletClient, createPublicClient, http, parseAbi, isAddress } from "viem";
+import { createWalletClient, createPublicClient, parseAbi, isAddress } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { APP_CHAIN, RPC_URL } from "@/lib/chain-config";
+import { APP_CHAIN, APP_TRANSPORT } from "@/lib/chain-config";
 
 // Contract configuration
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}`;
@@ -17,7 +17,7 @@ const flagWalletAbi = parseAbi([
 
 const publicClient = createPublicClient({
   chain: APP_CHAIN,
-  transport: http(RPC_URL),
+  transport: APP_TRANSPORT,
 });
 
 /**
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
     const walletClient = createWalletClient({
       account,
       chain: APP_CHAIN,
-      transport: http(RPC_URL),
+      transport: APP_TRANSPORT,
     });
 
     // Submit flag transaction

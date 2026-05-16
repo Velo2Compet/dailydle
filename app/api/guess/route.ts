@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   createPublicClient,
-  http,
   parseAbi,
   keccak256,
   encodePacked,
@@ -17,7 +16,7 @@ import {
   computeDailyCharacterId,
   getSessionMessage,
 } from "@/lib/salted-guess";
-import { APP_CHAIN, RPC_URL } from "@/lib/chain-config";
+import { APP_CHAIN, APP_TRANSPORT } from "@/lib/chain-config";
 import { setPendingReveal } from "@/lib/pending-reveals";
 import { trackDeviceWallet } from "@/lib/device-tracking";
 import { readOrIssueDeviceId, applyDeviceIdCookie } from "@/lib/server-device-id";
@@ -41,7 +40,7 @@ const saltedContractAbi = parseAbi([
 
 const publicClient = createPublicClient({
   chain: APP_CHAIN,
-  transport: http(RPC_URL),
+  transport: APP_TRANSPORT,
 });
 
 /**

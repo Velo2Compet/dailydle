@@ -11,7 +11,8 @@ import { usePlayerWinsYesterdayAndToday, useTotalPendingRewards, useClaimAllWinn
 import { useIsOwner, useOwnerWithdrawableAmount, useOwnerWithdraw, useEmergencyWithdraw } from "@/hooks/useOwnerWithdraw";
 import { useDailyPool, useAddDailyBonus } from "@/hooks/useDailyPool";
 import { useFeePerGuess, useSetFee } from "@/hooks/useGameFee";
-import { formatEther, formatGwei, parseEther } from "viem";
+import { formatGwei, parseEther } from "viem";
+import { formatEthShort, formatGweiShort } from "@/lib/format";
 import { WalletButton } from "./WalletButton";
 import { StatsHeader } from "./StatsHeader";
 import { Footer } from "./Footer";
@@ -509,21 +510,21 @@ export function ProfileView() {
               </div>
 
               {/* Estimated Rewards Tomorrow */}
-              <div className="bg-white/5 border border-violet-500/20 rounded-lg sm:rounded-xl p-2 sm:p-4 text-center">
+              <div className="bg-white/5 border border-violet-500/20 rounded-lg sm:rounded-xl p-2 sm:p-4 text-center min-w-0">
                 <p className="text-[10px] sm:text-sm text-white/50 mb-0.5 sm:mb-1">Est. tomorrow</p>
-                <p className="text-xl sm:text-3xl font-bold text-yellow-400">
+                <p className="text-lg sm:text-3xl font-bold text-yellow-400 truncate">
                   {today.wins > 0 && todayPool.totalWins > 0
-                    ? `~${formatEther((todayPool.winnersPool * BigInt(today.wins)) / BigInt(todayPool.totalWins))}`
+                    ? `~${formatEthShort((todayPool.winnersPool * BigInt(today.wins)) / BigInt(todayPool.totalWins))}`
                     : "—"}
                 </p>
                 <p className="text-[10px] sm:text-xs text-white/40 mt-0.5 sm:mt-1">ETH</p>
               </div>
 
               {/* Total Claimable */}
-              <div className="bg-white/5 rounded-lg sm:rounded-xl p-2 sm:p-4 text-center">
+              <div className="bg-white/5 rounded-lg sm:rounded-xl p-2 sm:p-4 text-center min-w-0">
                 <p className="text-[10px] sm:text-sm text-white/50 mb-0.5 sm:mb-1">Claimable</p>
-                <p className="text-xl sm:text-3xl font-bold text-green-400">
-                  {formatEther(totalPending)}
+                <p className="text-lg sm:text-3xl font-bold text-green-400 truncate">
+                  {formatEthShort(totalPending)}
                 </p>
                 <p className="text-[10px] sm:text-xs text-white/40 mt-0.5 sm:mt-1">ETH</p>
               </div>
@@ -543,7 +544,7 @@ export function ProfileView() {
                 ? "Claiming..."
                 : totalPending === BigInt(0)
                 ? "Nothing to claim"
-                : `Claim ${formatEther(totalPending)} ETH`}
+                : `Claim ${formatEthShort(totalPending)} ETH`}
             </button>
 
             {isWinnerClaimConfirmed && (
@@ -581,28 +582,28 @@ export function ProfileView() {
               {/* Treasury Stats */}
               <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-3 sm:mb-4">
                 {/* Contract Balance */}
-                <div className="bg-white/5 rounded-lg sm:rounded-xl p-2 sm:p-4 text-center">
+                <div className="bg-white/5 rounded-lg sm:rounded-xl p-2 sm:p-4 text-center min-w-0">
                   <p className="text-[10px] sm:text-sm text-white/50 mb-0.5 sm:mb-1">Balance</p>
-                  <p className="text-base sm:text-2xl font-bold text-blue-400">
-                    {formatEther(contractBalance)}
+                  <p className="text-base sm:text-2xl font-bold text-blue-400 truncate">
+                    {formatEthShort(contractBalance)}
                   </p>
                   <p className="text-[10px] sm:text-xs text-white/40 mt-0.5 sm:mt-1">ETH</p>
                 </div>
 
                 {/* Reserved Funds */}
-                <div className="bg-white/5 rounded-lg sm:rounded-xl p-2 sm:p-4 text-center">
+                <div className="bg-white/5 rounded-lg sm:rounded-xl p-2 sm:p-4 text-center min-w-0">
                   <p className="text-[10px] sm:text-sm text-white/50 mb-0.5 sm:mb-1">Reserved</p>
-                  <p className="text-base sm:text-2xl font-bold text-orange-400">
-                    {formatEther(displayedReserved)}
+                  <p className="text-base sm:text-2xl font-bold text-orange-400 truncate">
+                    {formatEthShort(displayedReserved)}
                   </p>
                   <p className="text-[10px] sm:text-xs text-white/40 mt-0.5 sm:mt-1">ETH</p>
                 </div>
 
                 {/* Withdrawable */}
-                <div className="bg-white/5 rounded-lg sm:rounded-xl p-2 sm:p-4 text-center">
+                <div className="bg-white/5 rounded-lg sm:rounded-xl p-2 sm:p-4 text-center min-w-0">
                   <p className="text-[10px] sm:text-sm text-white/50 mb-0.5 sm:mb-1">Withdrawable</p>
-                  <p className="text-base sm:text-2xl font-bold text-green-400">
-                    {formatEther(withdrawableAmount)}
+                  <p className="text-base sm:text-2xl font-bold text-green-400 truncate">
+                    {formatEthShort(withdrawableAmount)}
                   </p>
                   <p className="text-[10px] sm:text-xs text-white/40 mt-0.5 sm:mt-1">ETH</p>
                 </div>
@@ -642,16 +643,16 @@ export function ProfileView() {
                 <div className="mt-3 sm:mt-4 bg-white/5 rounded-lg sm:rounded-xl p-2 sm:p-3">
                   <p className="text-white/50 text-[10px] sm:text-xs mb-2">Reserve Breakdown:</p>
                   <div className="grid grid-cols-3 gap-1 text-[10px] sm:text-xs">
-                    <div className="text-center">
-                      <p className="text-orange-400">{formatEther(reservedForReferrals)}</p>
+                    <div className="text-center min-w-0">
+                      <p className="text-orange-400 truncate">{formatEthShort(reservedForReferrals)}</p>
                       <p className="text-white/40">Referrals</p>
                     </div>
-                    <div className="text-center">
-                      <p className="text-violet-400">{formatEther(reservedForWinners)}</p>
+                    <div className="text-center min-w-0">
+                      <p className="text-violet-400 truncate">{formatEthShort(reservedForWinners)}</p>
                       <p className="text-white/40">Winners</p>
                     </div>
-                    <div className="text-center">
-                      <p className="text-blue-400">{formatEther(reservedForUnfinalized)}</p>
+                    <div className="text-center min-w-0">
+                      <p className="text-blue-400 truncate">{formatEthShort(reservedForUnfinalized)}</p>
                       <p className="text-white/40">Unfinalized</p>
                     </div>
                   </div>
@@ -666,7 +667,7 @@ export function ProfileView() {
               >
                 {isEmergencyPending || isEmergencyConfirming
                   ? "Emergency Withdrawing..."
-                  : `Emergency Withdraw (${formatEther(contractBalance)} ETH)`}
+                  : `Emergency Withdraw (${formatEthShort(contractBalance)} ETH)`}
               </button>
 
               {isEmergencyConfirmed && (
@@ -694,19 +695,19 @@ export function ProfileView() {
 
               {/* Current fee display */}
               <div className="grid grid-cols-2 gap-2 sm:gap-4 mb-3 sm:mb-4">
-                <div className="bg-white/5 rounded-lg sm:rounded-xl p-2 sm:p-4 text-center">
+                <div className="bg-white/5 rounded-lg sm:rounded-xl p-2 sm:p-4 text-center min-w-0">
                   <p className="text-[10px] sm:text-sm text-white/50 mb-0.5 sm:mb-1">
                     Current fee
                   </p>
-                  <p className="text-base sm:text-2xl font-bold text-violet-400">
-                    {formatGwei(currentFeeWei)}
+                  <p className="text-base sm:text-2xl font-bold text-violet-400 truncate">
+                    {formatGweiShort(currentFeeWei)}
                   </p>
                   <p className="text-[10px] sm:text-xs text-white/40 mt-0.5 sm:mt-1">gwei</p>
                 </div>
-                <div className="bg-white/5 rounded-lg sm:rounded-xl p-2 sm:p-4 text-center">
+                <div className="bg-white/5 rounded-lg sm:rounded-xl p-2 sm:p-4 text-center min-w-0">
                   <p className="text-[10px] sm:text-sm text-white/50 mb-0.5 sm:mb-1">In ETH</p>
-                  <p className="text-base sm:text-2xl font-bold text-blue-400 break-all">
-                    {formatEther(currentFeeWei)}
+                  <p className="text-base sm:text-2xl font-bold text-blue-400 truncate">
+                    {formatEthShort(currentFeeWei)}
                   </p>
                   <p className="text-[10px] sm:text-xs text-white/40 mt-0.5 sm:mt-1">ETH</p>
                 </div>
@@ -783,10 +784,10 @@ export function ProfileView() {
               {/* Pool Stats - show 0 if contract balance is 0 */}
               <div className="grid grid-cols-2 gap-2 sm:gap-4 mb-3 sm:mb-4">
                 {/* Yesterday's Pool */}
-                <div className="bg-white/5 rounded-lg sm:rounded-xl p-2 sm:p-4 text-center">
+                <div className="bg-white/5 rounded-lg sm:rounded-xl p-2 sm:p-4 text-center min-w-0">
                   <p className="text-[10px] sm:text-sm text-white/50 mb-0.5 sm:mb-1">Yesterday (claimable)</p>
-                  <p className="text-base sm:text-2xl font-bold text-orange-400">
-                    {contractBalance > BigInt(0) ? formatEther(yesterdayPool.winnersPool) : "0"} ETH
+                  <p className="text-base sm:text-2xl font-bold text-orange-400 truncate">
+                    {contractBalance > BigInt(0) ? formatEthShort(yesterdayPool.winnersPool) : "0"} ETH
                   </p>
                   <p className="text-[10px] sm:text-xs text-white/40 mt-0.5 sm:mt-1">
                     {yesterdayPool.isFinalized ? `${yesterdayPool.totalWins} winner${yesterdayPool.totalWins > 1 ? 's' : ''}` : "Not finalized yet"}
@@ -794,13 +795,13 @@ export function ProfileView() {
                 </div>
 
                 {/* Today's Pool */}
-                <div className="bg-white/5 rounded-lg sm:rounded-xl p-2 sm:p-4 text-center">
+                <div className="bg-white/5 rounded-lg sm:rounded-xl p-2 sm:p-4 text-center min-w-0">
                   <p className="text-[10px] sm:text-sm text-white/50 mb-0.5 sm:mb-1">Today</p>
-                  <p className="text-base sm:text-2xl font-bold text-emerald-400">
-                    {contractBalance > BigInt(0) ? formatEther(todayPool.winnersPool) : "0"} ETH
+                  <p className="text-base sm:text-2xl font-bold text-emerald-400 truncate">
+                    {contractBalance > BigInt(0) ? formatEthShort(todayPool.winnersPool) : "0"} ETH
                   </p>
-                  <p className="text-[10px] sm:text-xs text-white/40 mt-0.5 sm:mt-1">
-                    {todayPool.totalWins} winner{todayPool.totalWins > 1 ? 's' : ''} · Total: {contractBalance > BigInt(0) ? formatEther(todayPool.totalPool) : "0"}
+                  <p className="text-[10px] sm:text-xs text-white/40 mt-0.5 sm:mt-1 truncate">
+                    {todayPool.totalWins} winner{todayPool.totalWins > 1 ? 's' : ''} · Total: {contractBalance > BigInt(0) ? formatEthShort(todayPool.totalPool) : "0"}
                   </p>
                 </div>
               </div>
@@ -868,13 +869,13 @@ export function ProfileView() {
 
                 {/* Referral Stats */}
                 <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-4">
-                  <div className="bg-white/5 rounded-lg sm:rounded-xl p-2 sm:p-3 text-center">
-                    <p className="text-lg sm:text-xl font-bold text-white">{referralCount}</p>
+                  <div className="bg-white/5 rounded-lg sm:rounded-xl p-2 sm:p-3 text-center min-w-0">
+                    <p className="text-lg sm:text-xl font-bold text-white truncate">{referralCount}</p>
                     <p className="text-white/50 text-[10px] sm:text-xs">Referred users</p>
                   </div>
-                  <div className="bg-white/5 rounded-lg sm:rounded-xl p-2 sm:p-3 text-center">
-                    <p className="text-lg sm:text-xl font-bold text-violet-400">
-                      {formatEther(totalEarned)}
+                  <div className="bg-white/5 rounded-lg sm:rounded-xl p-2 sm:p-3 text-center min-w-0">
+                    <p className="text-lg sm:text-xl font-bold text-violet-400 truncate">
+                      {formatEthShort(totalEarned)}
                     </p>
                     <p className="text-white/50 text-[10px] sm:text-xs">ETH generated</p>
                   </div>
@@ -970,9 +971,9 @@ export function ProfileView() {
                   </div>
                 </div>
 
-                <div className="bg-white/5 rounded-lg sm:rounded-xl p-3 sm:p-4 mb-3 sm:mb-4 text-center flex-1 flex flex-col items-center justify-center">
-                  <p className="text-xl sm:text-3xl font-bold text-violet-400">
-                    {formatEther(pendingRewards)} ETH
+                <div className="bg-white/5 rounded-lg sm:rounded-xl p-3 sm:p-4 mb-3 sm:mb-4 text-center flex-1 flex flex-col items-center justify-center min-w-0 w-full">
+                  <p className="text-xl sm:text-3xl font-bold text-violet-400 truncate max-w-full">
+                    {formatEthShort(pendingRewards)} ETH
                   </p>
                   <p className="text-white/50 text-xs sm:text-sm mt-1">Pending rewards</p>
                 </div>
