@@ -513,6 +513,7 @@ export function GameBoard({ collection }: GameBoardProps) {
     isPartial?: boolean;
     guessValue: number | string | string[];
     correctValue: number | string | string[];
+    direction?: "higher" | "lower";
   }
 
   const getStatusClass = (comparison: Comparison) => {
@@ -524,7 +525,14 @@ export function GameBoard({ collection }: GameBoardProps) {
   const getArrow = (comparison: Comparison, attrType?: string) => {
     if (comparison.isCorrect) return null;
 
-    // Pour les attributs de type int, afficher les flèches
+    // Le serveur cache correctValue pour les int (anti-cheat) en mettant
+    // correctValue = guessValue, mais envoie un champ `direction`. On lit
+    // ce champ en priorité.
+    if (comparison.direction === "higher") return <ArrowUp className="w-4 h-4" />;
+    if (comparison.direction === "lower") return <ArrowDown className="w-4 h-4" />;
+
+    // Fallback: comparaison directe au cas où direction serait absent
+    // (anciens guesses en localStorage par exemple).
     if (attrType === "int") {
       const guessNum = Number(comparison.guessValue);
       const correctNum = Number(comparison.correctValue);
