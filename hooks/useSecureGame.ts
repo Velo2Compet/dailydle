@@ -527,7 +527,13 @@ export function useSecureGame(collection: Collection) {
       }
 
       if (!feePerGuess) {
-        setGameState((prev) => ({ ...prev, error: "Fee not loaded" }));
+        setGameState((prev) => ({
+          ...prev,
+          error: "Contract fee still loading — please try again in a moment.",
+        }));
+        // Kick a fresh multicall so the next click has a chance to succeed
+        // even if the initial read failed silently.
+        refetchSession();
         return null;
       }
 
@@ -644,7 +650,7 @@ export function useSecureGame(collection: Collection) {
         return null;
       }
     },
-    [address, isConnected, feePerGuess, collection.id, collection.characters, gameState.hasWonToday, gameState.attemptsToday, ensureSessionSignature, submitGuessAsync, chainId, switchChainAsync, currentDay]
+    [address, isConnected, feePerGuess, collection.id, collection.characters, gameState.hasWonToday, gameState.attemptsToday, ensureSessionSignature, submitGuessAsync, chainId, switchChainAsync, currentDay, refetchSession]
   );
 
   /**
@@ -753,6 +759,7 @@ export function useSecureGame(collection: Collection) {
     // State
     ...gameState,
     feePerGuess: feePerGuess ? Number(feePerGuess) : 0,
+    isFeeLoaded: feePerGuess !== undefined,
     isGuessPending,
     currentDay,
     hasSessionSignature,

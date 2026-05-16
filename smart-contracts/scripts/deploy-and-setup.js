@@ -2,6 +2,7 @@ const { ethers, network } = require("hardhat");
 const fs = require("fs");
 const path = require("path");
 require("dotenv").config({ path: path.resolve(process.cwd(), ".env.local") });
+const { rotateSecrets } = require("./rotate-secrets");
 
 /**
  * One-shot deploy + setup script.
@@ -169,6 +170,45 @@ function patchEnvLocal(updates) {
 // Pre-flight checks
 // ---------------------------------------------------------------------------
 
+/**
+ * Auto-rotate the locally-generatable secrets if any are missing. Triggers
+ * only on the first run of a fresh environment (.env.local without
+ * SALT_DECRYPT). Once rotated, the new values are loaded into process.env
+ * so the rest of this script — and the deploy itself, which puts the
+ * SERVER_PRIVATE_KEY's address on-chain as the contract `server` — uses
+ * them immediately.
+ *
+ * Set ROTATE=1 to force a rotation even if SALT_DECRYPT is present.
+ */
+function autoRotateIfNeeded() {
+  const forced = process.env.ROTATE === "1";
+  const missing = !process.env.SALT_DECRYPT;
+  if (!forced && !missing) return null;
+
+  const reason = forced ? "ROTATE=1 set" : "SALT_DECRYPT missing — fresh setup";
+  log("🔁", `Rotating local secrets (${reason})…`);
+
+  const { rotated, newServerAddress, backup } = rotateSecrets();
+  log("✨", `Rotated: ${rotated.join(", ")}`);
+  if (newServerAddress) {
+    log("🖥️", `New server address: ${newServerAddress}`);
+  }
+  log("💾", `.env.local backup: ${path.basename(backup)}`);
+
+  // Re-load .env.local so the freshly-generated values are visible to the
+  // rest of the script (the initial dotenv.config at file top has already
+  // captured stale/empty values into process.env).
+  require("dotenv").config({
+    path: path.resolve(process.cwd(), ".env.local"),
+    override: true,
+  });
+
+  log("ℹ️", "Don't forget to manually rotate QUIZZDLE_API_KEY (Quizzdle backend) " +
+    "and UPSTASH_REDIS_REST_TOKEN (Upstash dashboard) — they can't be regenerated locally.");
+  console.log("");
+  return { rotated, newServerAddress };
+}
+
 async function preflight() {
   header("PRE-FLIGHT CHECKS");
 
@@ -177,6 +217,11 @@ async function preflight() {
   if (!process.env.PRIVATE_KEY) {
     throw new Error("PRIVATE_KEY is not set in .env.local — the deployer needs ETH.");
   }
+
+  // Rotate first so the rest of preflight (e.g. SERVER_PRIVATE_KEY address)
+  // reflects the newly-generated values.
+  autoRotateIfNeeded();
+
   if (!QUIZZDLE_API_KEY && !SKIP_COLLECTIONS) {
     throw new Error(
       "QUIZZDLE_API_KEY is not set — needed to fetch the collection list. " +
