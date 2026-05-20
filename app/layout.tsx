@@ -3,6 +3,7 @@ import { Inter, Source_Code_Pro } from "next/font/google";
 import { SafeArea } from "@coinbase/onchainkit/minikit";
 import { minikitConfig } from "../minikit.config";
 import { RootProvider } from "./rootProvider";
+import "@coinbase/onchainkit/styles.css";
 import "./globals.css";
 
 export async function generateMetadata(): Promise<Metadata> {
