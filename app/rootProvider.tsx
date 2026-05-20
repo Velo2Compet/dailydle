@@ -8,7 +8,7 @@ import {
   createStorage,
   cookieStorage,
 } from "wagmi";
-import { baseAccount } from "wagmi/connectors";
+import { baseAccount, injected } from "wagmi/connectors";
 import { farcasterMiniApp } from "@farcaster/miniapp-wagmi-connector";
 import { OnchainKitProvider } from "@coinbase/onchainkit";
 import { APP_TRANSPORT, APP_CHAIN_ID } from "@/lib/chain-config";
@@ -25,16 +25,21 @@ import { MiniKitReady } from "./MiniKitReady";
  * Connector order matters:
  *   - <ConnectWallet/> in OnchainKit, when it detects a mini-app context,
  *     does a direct connect({ connector: connectors[0] }) bypassing the
- *     wallet selection modal. Inside Base App's in-app browser (post
- *     April-2026 migration) the Farcaster mini-app wallet provider is no
- *     longer wired — only baseAccount works. So baseAccount comes first.
- *   - farcasterMiniApp() stays in the array as a fallback for Warpcast or
- *     any other Farcaster client that still exposes sdk.wallet.ethProvider.
+ *     wallet selection modal. Inside Base App's in-app browser the
+ *     standard window.ethereum provider is exposed and supports
+ *     eth_requestAccounts, but does NOT implement the wallet_connect RPC
+ *     that baseAccount() relies on — so injected() must come first per
+ *     the official Base App compatibility guide.
+ *   - baseAccount() stays for desktop / regular browsers where the user
+ *     should be offered the Base Smart Wallet popup flow.
+ *   - farcasterMiniApp() is a last-resort fallback for Warpcast or any
+ *     other Farcaster client that still exposes sdk.wallet.ethProvider.
  */
 function buildWagmiConfig() {
   return createConfig({
     chains: [base, baseSepolia],
     connectors: [
+      injected(),
       baseAccount({ appName: "Dailydle" }),
       farcasterMiniApp(),
     ],
