@@ -1,103 +1,78 @@
 "use client";
-import { useRef, useEffect } from "react";
-import { Wallet } from "@coinbase/onchainkit/wallet";
-import { useMiniKit } from "@coinbase/onchainkit/minikit";
+import { useEffect, useState } from "react";
 import { useAccount, useConnect } from "wagmi";
+import { sdk } from "@farcaster/miniapp-sdk";
 import { Button } from "./Button";
 
 /**
- * Composant qui wrap le Wallet d'OnchainKit avec le style du Button
- * - Sur Base App: connexion directe avec le wallet Base App
- * - Ailleurs: ouvre le modal avec tous les wallets disponibles (Metamask, Coinbase, etc.)
+ * Wallet connect button.
+ * - Inside Base App / Farcaster mini-app: connects directly via the farcasterMiniApp connector.
+ * - Anywhere else: connects via the baseAccount connector (Base Smart Wallet).
+ *
+ * No hidden <Wallet/> portal trick — the previous version dispatched .click() on a
+ * display:none button, which OnchainKit refuses to open inside Base App's webview.
  */
-export function WalletButton({ size = "md", fullWidth = false, className = "" }: { size?: "sm" | "md" | "lg"; fullWidth?: boolean; className?: string }) {
-  const walletRef = useRef<HTMLDivElement>(null);
-  const { context } = useMiniKit();
+export function WalletButton({
+  size = "md",
+  fullWidth = false,
+  className = "",
+}: {
+  size?: "sm" | "md" | "lg";
+  fullWidth?: boolean;
+  className?: string;
+}) {
   const { isConnected } = useAccount();
-  const { connect, connectors } = useConnect();
-
-  // Détecte si on est sur Base App (Farcaster miniapp)
-  const isOnBaseApp = !!context?.user?.fid;
+  const { connect, connectors, isPending } = useConnect();
+  const [isMiniApp, setIsMiniApp] = useState<boolean | null>(null);
 
   useEffect(() => {
-    // Trouver et cacher le bouton Wallet après le rendu
-    const findAndHideWalletButton = () => {
-      if (walletRef.current) {
-        // Chercher tous les boutons dans le conteneur Wallet
-        const buttons = walletRef.current.querySelectorAll('button');
-        buttons.forEach((button) => {
-          // Cacher complètement le bouton Wallet original
-          button.style.cssText = 'display: none !important; visibility: hidden !important; position: absolute !important; opacity: 0 !important; pointer-events: none !important; width: 0 !important; height: 0 !important;';
-        });
-
-        // Cacher aussi les divs qui pourraient contenir le bouton
-        const walletContainers = walletRef.current.querySelectorAll('[data-testid="ockWalletButton"], [data-onchainkit="wallet-button"]');
-        walletContainers.forEach((container) => {
-          (container as HTMLElement).style.cssText = 'display: none !important;';
-        });
-      }
-    };
-
-    // Essayer plusieurs fois car le Wallet peut se rendre de manière asynchrone
-    const timeout1 = setTimeout(findAndHideWalletButton, 50);
-    const timeout2 = setTimeout(findAndHideWalletButton, 200);
-    const timeout3 = setTimeout(findAndHideWalletButton, 500);
-
+    let cancelled = false;
+    sdk
+      .isInMiniApp()
+      .then((v) => {
+        if (!cancelled) setIsMiniApp(v);
+      })
+      .catch(() => {
+        if (!cancelled) setIsMiniApp(false);
+      });
     return () => {
-      clearTimeout(timeout1);
-      clearTimeout(timeout2);
-      clearTimeout(timeout3);
+      cancelled = true;
     };
   }, []);
 
   const handleClick = () => {
-    if (isConnected) return;
+    if (isConnected || isPending) return;
 
-    if (isOnBaseApp) {
-      // Sur Base App: connexion directe avec le connecteur Farcaster/MiniKit
-      const farcasterConnector = connectors.find(c =>
-        c.id === 'farcasterFrame' ||
-        c.id === 'minikit' ||
-        c.name.toLowerCase().includes('farcaster')
-      );
-
-      if (farcasterConnector) {
-        connect({ connector: farcasterConnector });
-      } else {
-        // Fallback: utiliser le premier connecteur disponible
-        const firstConnector = connectors[0];
-        if (firstConnector) {
-          connect({ connector: firstConnector });
-        }
-      }
-    } else {
-      // Pas sur Base App: ouvrir le modal OnchainKit avec tous les wallets
-      const walletButton = walletRef.current?.querySelector('button') as HTMLButtonElement;
-      if (walletButton) {
-        walletButton.click();
-      } else {
-        // Fallback : chercher dans tout le document
-        const allWalletButtons = document.querySelectorAll('button[data-testid="ockWalletButton"], button[data-onchainkit="wallet-button"], [data-onchainkit="wallet-button"] button');
-        if (allWalletButtons.length > 0) {
-          (allWalletButtons[0] as HTMLButtonElement).click();
-        }
-      }
+    if (isMiniApp) {
+      const farcaster =
+        connectors.find(
+          (c) =>
+            c.id === "farcaster" ||
+            c.id === "farcasterMiniApp" ||
+            c.name.toLowerCase().includes("farcaster")
+        ) ?? connectors[0];
+      if (farcaster) connect({ connector: farcaster });
+      return;
     }
+
+    const base =
+      connectors.find(
+        (c) =>
+          c.id === "baseAccount" ||
+          c.name.toLowerCase().includes("base")
+      ) ?? connectors[0];
+    if (base) connect({ connector: base });
   };
 
   return (
-    <>
-      <div ref={walletRef} style={{ position: 'absolute', left: '-9999px', opacity: 0, pointerEvents: 'none' }}>
-        <Wallet />
-      </div>
-      <Button
-        size={size}
-        fullWidth={fullWidth}
-        onClick={handleClick}
-        className={className}
-      >
-        Connect Wallet
-      </Button>
-    </>
+    <Button
+      size={size}
+      fullWidth={fullWidth}
+      onClick={handleClick}
+      className={className}
+      disabled={isPending || isMiniApp === null}
+    >
+      {isPending ? "Connecting…" : "Connect Wallet"}
+    </Button>
   );
 }

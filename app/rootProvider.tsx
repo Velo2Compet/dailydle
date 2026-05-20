@@ -12,6 +12,7 @@ import { baseAccount } from "wagmi/connectors";
 import { farcasterMiniApp } from "@farcaster/miniapp-wagmi-connector";
 import { OnchainKitProvider } from "@coinbase/onchainkit";
 import { APP_TRANSPORT, APP_CHAIN_ID } from "@/lib/chain-config";
+import { MiniKitReady } from "./MiniKitReady";
 
 /**
  * We build our own wagmi config and wrap OnchainKitProvider with a
@@ -76,6 +77,7 @@ export function RootProvider({ children }: { children: ReactNode }) {
           notificationProxyUrl: undefined,
         }}
       >
+        <MiniKitReady />
         {children}
       </OnchainKitProvider>
     </WagmiProvider>

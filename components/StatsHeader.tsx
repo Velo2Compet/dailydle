@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useAccount, useReadContract, useConnect } from "wagmi";
 import { parseAbi } from "viem";
 import { APP_CHAIN_ID } from "@/lib/chain-config";
-import { useMiniKit } from "@coinbase/onchainkit/minikit";
-import { Wallet } from "@coinbase/onchainkit/wallet";
+import { sdk } from "@farcaster/miniapp-sdk";
 import { StatCard } from "./StatCard";
 
 const CONTRACT_ABI = parseAbi([
@@ -161,49 +160,50 @@ function useStatsData() {
 
 export function StatsHeader() {
   const { userTotalWins, globalTotalWins, winnersTodayCount, isConnected } = useStatsData();
-  const { context } = useMiniKit();
-  const { connect, connectors } = useConnect();
-  const walletRef = useRef<HTMLDivElement>(null);
-  const isOnBaseApp = !!context?.user?.fid;
+  const { connect, connectors, isPending } = useConnect();
+  const [isMiniApp, setIsMiniApp] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    sdk
+      .isInMiniApp()
+      .then((v) => {
+        if (!cancelled) setIsMiniApp(v);
+      })
+      .catch(() => {
+        if (!cancelled) setIsMiniApp(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleWalletClick = () => {
-    if (isConnected) return;
+    if (isConnected || isPending) return;
 
-    if (isOnBaseApp) {
-      const farcasterConnector = connectors.find(c =>
-        c.id === 'farcasterFrame' ||
-        c.id === 'minikit' ||
-        c.name.toLowerCase().includes('farcaster')
-      );
-
-      if (farcasterConnector) {
-        connect({ connector: farcasterConnector });
-      } else {
-        const firstConnector = connectors[0];
-        if (firstConnector) {
-          connect({ connector: firstConnector });
-        }
-      }
-    } else {
-      const walletButton = walletRef.current?.querySelector('button') as HTMLButtonElement;
-      if (walletButton) {
-        walletButton.click();
-      } else {
-        const allWalletButtons = document.querySelectorAll('button[data-testid="ockWalletButton"], button[data-onchainkit="wallet-button"], [data-onchainkit="wallet-button"] button');
-        if (allWalletButtons.length > 0) {
-          (allWalletButtons[0] as HTMLButtonElement).click();
-        }
-      }
+    if (isMiniApp) {
+      const farcaster =
+        connectors.find(
+          (c) =>
+            c.id === "farcaster" ||
+            c.id === "farcasterMiniApp" ||
+            c.name.toLowerCase().includes("farcaster")
+        ) ?? connectors[0];
+      if (farcaster) connect({ connector: farcaster });
+      return;
     }
+
+    const base =
+      connectors.find(
+        (c) =>
+          c.id === "baseAccount" ||
+          c.name.toLowerCase().includes("base")
+      ) ?? connectors[0];
+    if (base) connect({ connector: base });
   };
 
   return (
     <div className="w-full px-2 sm:px-4 py-2 sm:py-4">
-      {/* Wallet caché pour ouvrir le modal OnchainKit */}
-      <div ref={walletRef} style={{ position: 'absolute', left: '-9999px', opacity: 0, pointerEvents: 'none' }}>
-        <Wallet />
-      </div>
-
       <div className="flex justify-center items-stretch gap-1.5 sm:gap-2 md:gap-3 flex-nowrap max-w-[1200px] mx-auto p-2 sm:p-3 md:p-4 rounded-xl bg-white/[0.08] backdrop-blur-lg border border-white/10">
         <StatCard
           icon={<HomeIcon />}

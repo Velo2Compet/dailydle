@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useMiniKit } from "@coinbase/onchainkit/minikit";
+import { useState } from "react";
 import Link from "next/link";
 import type { QuizzdleCategoryRef } from "@/lib/quizzdle-api";
 import { quizzdleImageUrl } from "@/lib/quizzdle-api";
@@ -13,12 +12,7 @@ interface CategoriesViewProps {
 }
 
 export function CategoriesView({ categories }: CategoriesViewProps) {
-  const { isFrameReady, setFrameReady } = useMiniKit();
   const [searchTerm, setSearchTerm] = useState("");
-
-  useEffect(() => {
-    if (!isFrameReady) setFrameReady();
-  }, [setFrameReady, isFrameReady]);
 
   const filteredCategories = categories.filter((cat) =>
     cat.name.toLowerCase().includes(searchTerm.toLowerCase())

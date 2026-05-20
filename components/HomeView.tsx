@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useMiniKit } from "@coinbase/onchainkit/minikit";
 import Link from "next/link";
 import { StatsHeader } from "@/components/StatsHeader";
 import { GmStreakCard } from "@/components/GmStreakCard";
@@ -19,7 +18,6 @@ interface HomeViewProps {
 }
 
 export function HomeView({ categories, parents = [] }: HomeViewProps) {
-  const { isFrameReady, setFrameReady } = useMiniKit();
   const [search, setSearch] = useState("");
   const [selectedParentId, setSelectedParentId] = useState<number | null>(null);
 
@@ -95,10 +93,6 @@ export function HomeView({ categories, parents = [] }: HomeViewProps) {
       return true;
     });
   }, [categories, search, selectedParentId, parentIdsByCategory]);
-
-  useEffect(() => {
-    if (!isFrameReady) setFrameReady();
-  }, [setFrameReady, isFrameReady]);
 
   return (
     <div className={styles.container}>
