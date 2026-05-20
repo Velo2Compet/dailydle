@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useAccount, useReadContract, useConnect } from "wagmi";
 import { parseAbi } from "viem";
 import { APP_CHAIN_ID } from "@/lib/chain-config";
-import { sdk } from "@farcaster/miniapp-sdk";
 import { StatCard } from "./StatCard";
 
 const CONTRACT_ABI = parseAbi([
@@ -160,50 +159,27 @@ function useStatsData() {
 
 export function StatsHeader() {
   const { userTotalWins, globalTotalWins, winnersTodayCount, isConnected } = useStatsData();
-  const { connect, connectors, isPending } = useConnect();
-  const [isMiniApp, setIsMiniApp] = useState<boolean | null>(null);
+  const { connect, connectors, isPending, error } = useConnect();
+  const [showError, setShowError] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    sdk
-      .isInMiniApp()
-      .then((v) => {
-        if (!cancelled) setIsMiniApp(v);
-      })
-      .catch(() => {
-        if (!cancelled) setIsMiniApp(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
+  // connectors[0] is baseAccount (configured in rootProvider). It works in
+  // Base App's in-app browser and in regular browsers. Farcaster Warpcast
+  // users would fall back to the farcasterMiniApp connector via the
+  // standalone WalletButton component.
   const handleWalletClick = () => {
     if (isConnected || isPending) return;
-
-    if (isMiniApp) {
-      const farcaster =
-        connectors.find(
-          (c) =>
-            c.id === "farcaster" ||
-            c.id === "farcasterMiniApp" ||
-            c.name.toLowerCase().includes("farcaster")
-        ) ?? connectors[0];
-      if (farcaster) connect({ connector: farcaster });
-      return;
-    }
-
-    const base =
-      connectors.find(
-        (c) =>
-          c.id === "baseAccount" ||
-          c.name.toLowerCase().includes("base")
-      ) ?? connectors[0];
-    if (base) connect({ connector: base });
+    setShowError(true);
+    const primary = connectors[0];
+    if (primary) connect({ connector: primary });
   };
 
   return (
     <div className="w-full px-2 sm:px-4 py-2 sm:py-4">
+      {showError && error && (
+        <p className="text-xs text-red-400 text-center mb-2 px-2 break-words">
+          {error.message}
+        </p>
+      )}
       <div className="flex justify-center items-stretch gap-1.5 sm:gap-2 md:gap-3 flex-nowrap max-w-[1200px] mx-auto p-2 sm:p-3 md:p-4 rounded-xl bg-white/[0.08] backdrop-blur-lg border border-white/10">
         <StatCard
           icon={<HomeIcon />}

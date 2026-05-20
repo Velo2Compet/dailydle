@@ -1,16 +1,20 @@
 "use client";
-import { useEffect, useState } from "react";
-import { useAccount, useConnect } from "wagmi";
-import { sdk } from "@farcaster/miniapp-sdk";
+import { ConnectWallet } from "@coinbase/onchainkit/wallet";
+import { useConnect } from "wagmi";
 import { Button } from "./Button";
 
 /**
  * Wallet connect button.
- * - Inside Base App / Farcaster mini-app: connects directly via the farcasterMiniApp connector.
- * - Anywhere else: connects via the baseAccount connector (Base Smart Wallet).
  *
- * No hidden <Wallet/> portal trick — the previous version dispatched .click() on a
- * display:none button, which OnchainKit refuses to open inside Base App's webview.
+ * Delegates to OnchainKit's <ConnectWallet/> with a render prop so we keep
+ * our custom <Button/> styling while letting OnchainKit pick the right
+ * connector at runtime:
+ *   - In Farcaster mini-app context → connect({ connector: farcasterMiniApp })
+ *   - In Base App (post-April-2026) / regular browser with display:"modal"
+ *     → opens the wallet selection modal (baseAccount, injected, …)
+ *
+ * We also surface useConnect().error so a silent failure in Base App's
+ * webview shows up in the UI instead of disappearing.
  */
 export function WalletButton({
   size = "md",
@@ -21,58 +25,29 @@ export function WalletButton({
   fullWidth?: boolean;
   className?: string;
 }) {
-  const { isConnected } = useAccount();
-  const { connect, connectors, isPending } = useConnect();
-  const [isMiniApp, setIsMiniApp] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    sdk
-      .isInMiniApp()
-      .then((v) => {
-        if (!cancelled) setIsMiniApp(v);
-      })
-      .catch(() => {
-        if (!cancelled) setIsMiniApp(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const handleClick = () => {
-    if (isConnected || isPending) return;
-
-    if (isMiniApp) {
-      const farcaster =
-        connectors.find(
-          (c) =>
-            c.id === "farcaster" ||
-            c.id === "farcasterMiniApp" ||
-            c.name.toLowerCase().includes("farcaster")
-        ) ?? connectors[0];
-      if (farcaster) connect({ connector: farcaster });
-      return;
-    }
-
-    const base =
-      connectors.find(
-        (c) =>
-          c.id === "baseAccount" ||
-          c.name.toLowerCase().includes("base")
-      ) ?? connectors[0];
-    if (base) connect({ connector: base });
-  };
+  const { error } = useConnect();
 
   return (
-    <Button
-      size={size}
-      fullWidth={fullWidth}
-      onClick={handleClick}
-      className={className}
-      disabled={isPending || isMiniApp === null}
-    >
-      {isPending ? "Connecting…" : "Connect Wallet"}
-    </Button>
+    <div className="flex flex-col items-stretch gap-1">
+      <ConnectWallet
+        disconnectedLabel="Connect Wallet"
+        render={({ label, onClick, isLoading }) => (
+          <Button
+            size={size}
+            fullWidth={fullWidth}
+            onClick={onClick}
+            disabled={isLoading}
+            className={className}
+          >
+            {isLoading ? "Connecting…" : label}
+          </Button>
+        )}
+      />
+      {error && (
+        <p className="text-xs text-red-400 px-1">
+          {error.message}
+        </p>
+      )}
+    </div>
   );
 }

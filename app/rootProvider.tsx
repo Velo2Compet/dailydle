@@ -22,20 +22,21 @@ import { MiniKitReady } from "./MiniKitReady";
  * to wagmi/chains.base.rpcUrls.default (`https://mainnet.base.org`),
  * which 429s the moment we get any traffic.
  *
- * useProviderDependencies inside OnchainKit detects the ancestor
- * WagmiProvider via useConfig() and skips its own — so the connectors,
- * transports and storage we define here are the ones in effect.
- *
- * Connector order matters: OnchainKit's <AutoConnect/> picks
- * connectors[0] when it detects a Farcaster / Base App mini-app context,
- * so farcasterMiniApp must come first.
+ * Connector order matters:
+ *   - <ConnectWallet/> in OnchainKit, when it detects a mini-app context,
+ *     does a direct connect({ connector: connectors[0] }) bypassing the
+ *     wallet selection modal. Inside Base App's in-app browser (post
+ *     April-2026 migration) the Farcaster mini-app wallet provider is no
+ *     longer wired — only baseAccount works. So baseAccount comes first.
+ *   - farcasterMiniApp() stays in the array as a fallback for Warpcast or
+ *     any other Farcaster client that still exposes sdk.wallet.ethProvider.
  */
 function buildWagmiConfig() {
   return createConfig({
     chains: [base, baseSepolia],
     connectors: [
-      farcasterMiniApp(),
       baseAccount({ appName: "Dailydle" }),
+      farcasterMiniApp(),
     ],
     storage: createStorage({ storage: cookieStorage }),
     ssr: true,
